@@ -10,7 +10,7 @@ from scipy.ndimage import gaussian_filter
 
 ######################################################################################################################
 ######################################################################################################################
-# I/O functions
+# Input/Output functions
 ######################################################################################################################
 ######################################################################################################################
 
@@ -56,8 +56,6 @@ def load_single_pew_dict(SNR, v_angle, velocity, blob_size,IO_parameter):
         print('parameter given:', IO_parameter)
         exit() #exit is invalid IO parameter is given
     return load_obj(savefolder+savename)
-
-
 
 def plot_velocity_field(velocity_field):
 # plots the velocity field
