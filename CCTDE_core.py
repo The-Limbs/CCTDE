@@ -34,21 +34,32 @@ def calc_norm_factor(f,g):
 
 def calc_ccf(f,g,norm_bool = True,plot_bool=False):
     '''
-    -----------------------------------------------------------------------------------------------
-    Returns cross-correlation function and corresponding time-delays of two one dimenaional arrays
+    Returns cross-correlation function and corresponding time-delays of two one-dimenaional arrays.
 
-    :param f,g:          one dimensional arrays, usually time-series
-    :type f,g:           expecting 1D numpy arrays
-    :param norm_bool:    should the ccf be normalised?, defaults to True
-    :type norm_bool:     boolean
-    :param plot_bool:    should the ccf be plotted?, defaults to False
-    :type plot_bool:     boolean
-    :return ccf,lags:     cross-correlation function and corresponding time-delays
-    :rtype ccf,lags:      1D numpy arrays
-    ..notes::            ccf is calculated with scipy.signal.correlate.
-                         Mode is set to 'same', meaning ccf output is same length as f
-                         Method is set to 'fft', so correlation is calculated via fft method
-    -----------------------------------------------------------------------------------------------
+    Parameters
+    ----------
+    f,g : 1D numpy array
+        two input array to be cross-correlated.
+
+    Keyword arguments
+    -----------------
+    norm_bool : boolean
+        turn cross-correlation function normalisation on or off, defaults to True (on).
+    plot_bool : boolean
+        option to plot ccf, defaults to False.
+
+    Returns
+    -------
+    ccf : 1D numpy array
+        cross-correlation function of arrays f and g.
+    lags : 1D numpy array
+        lags corresponding to the ccf.
+
+    Notes
+    -----
+    :: ccf is calculated with scipy.signal.correlate.
+    :: Mode is set to 'same', meaning ccf output is same length as f
+    :: Method is set to 'fft', so correlation is calculated via fft method
     '''
     #zero center the signals
     f = f - np.mean(f)
@@ -80,3 +91,48 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
         fig.tight_layout()
         plt.show()
     return ccf,lags
+
+    def calculate_velocity(ccf,lags,spatial_seperation,correlation_threshold):
+        '''
+        Infers velocity from cross-correlation function and spatial seperation.
+
+        Parameters
+        ----------
+        ccf : 1D numpy array
+            Cross-correlation function.
+        lags : 1D numpy array
+            time-lags associated with ccf.
+        spatial_seperation : integer
+            the spatial seperation between the two time-series of the ccf. Given in number of spatial channels.
+        correlation_threshold : float between 0 and 1
+            defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
+
+        Returns
+        -------
+        velocity : float
+            the inferred velocity.
+        correlation_max : float
+            the peak correlation value used to infer velocity.
+
+        Notes
+        -----
+        :: if np.nan is returned, correlation threshold was not surpassed OR time-lag was equal to zero.
+        '''
+        # find the peak of the cross-correlation funstion
+        correlation_max = np.max(ccf)
+        # correlation peak must exceed correlation threshold
+        if correlation_max>correlation_threshold:
+            #find time-delay at ccf peak
+            index=np.where(np.max(my_ccf)==my_ccf)[0][0]
+            time_delay = lags[index]
+            #account for zero-time delay scenario
+            if time_delay == 0.:
+                #manually set velocity to nan
+                velocity = np.nan
+            else:
+                #calculate velocity
+                velocity = spatial_seperation/time_delay
+        else:
+            # set veloity to nan if below correlation threshold
+            velocity = np.nan
+        return velocity,correlation_max

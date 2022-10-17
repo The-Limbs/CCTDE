@@ -2,8 +2,6 @@ from my_funcs import *
 from CCTDE_core import calc_ccf
 
 
-print(calc_ccf.__doc__)
-
 data = load_obj('example_input_data')
 ts = data['time_series']
 
