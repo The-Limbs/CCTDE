@@ -8,7 +8,6 @@ from scipy import signal
 from scipy.signal import butter,filtfilt
 from scipy.ndimage import gaussian_filter
 
-#This is a test
 
 
 ######################################################################################################################
