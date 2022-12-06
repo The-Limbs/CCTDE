@@ -105,16 +105,16 @@ def infer_1D_velocity(ccf,lags,spatial_seperation,correlation_threshold):
     ccf : 1D numpy array
         Cross-correlation function.
     lags : 1D numpy array
-        time-lags associated with ccf.
+        time-lags associated with ccf. Should be given in [frames]
     spatial_seperation : integer
-        the spatial seperation between the two time-series of the ccf. Given in number of spatial channels.
+        the spatial seperation between the two time-series of the ccf. Given in number of spatial channels [px].
     correlation_threshold : float between 0 and 1
         defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
 
     Returns
     -------
     velocity : float
-        the inferred velocity.
+        the inferred velocity in [px/frame].
     correlation_max : float
         the peak correlation value used to infer velocity.
 
