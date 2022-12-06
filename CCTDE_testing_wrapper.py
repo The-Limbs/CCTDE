@@ -1,6 +1,5 @@
 from my_funcs import *
 from CCTDE_core import calc_ccf,infer_1D_velocity,infer_2D_velocity
-import 2to3
 
 data = load_obj('example_input_data')
 ts = data['time_series']
