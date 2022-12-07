@@ -28,12 +28,12 @@ def calc_norm_factor(f,g):
 
 
 
-def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000):
+def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False):
     '''
     This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
     It returns a one dimensional array of inferred velocities.
 
-    Arguments: (ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000)
+    Arguments: (ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False)
     Returns: inferred_velocities
 
     Parameters
@@ -51,6 +51,8 @@ def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold
     -----------------
     iterationlimit: integer
         maximum number of velocity inferences to make
+    plot_bool: boolean
+        True if you want to plot the cross-correlation functions.
 
     Returns
     -------
@@ -71,9 +73,9 @@ def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold
     while more_data:
         #take slices of time-series
         sliced_ts1 = ts1[i:i+N]
-        sliced_ts1 = ts2[i:i+N]
+        sliced_ts2 = ts2[i:i+N]
         #cross-correlate ts slices and infer velocity
-        ccf,tau = calc_ccf(sliced_ts1,sliced_ts1,plot_bool=False)
+        ccf,tau = calc_ccf(sliced_ts1,sliced_ts2,plot_bool=plot_bool)
         velocity, maxcorr = infer_1D_velocity(ccf,tau,spatial_seperation,correlation_threshold)
         #store velocity in array
         inferred_velocities[int(i/N)] = velocity
