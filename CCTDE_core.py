@@ -26,6 +26,64 @@ def calc_norm_factor(f,g):
     norm_factor = np.sqrt(sumsquare_f*sumsquare_g)
     return norm_factor
 
+
+def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000):
+    '''
+    This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
+    It returns a one dimensional array of inferred velocities.
+
+    Arguments: (ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000)
+    Returns: inferred_velocities
+
+    Parameters
+    ----------
+    ts1,ts2 : 1D numpy array
+        two input array to be cross-correlated.
+    N: interger
+        the length of the individual time-series to be analysed [number of frames]
+    spatial_seperation: integer
+        the spatial distance between the two time series [measured in number of channels]
+    correlation_threshold: float
+        threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+
+    Keyword arguments
+    -----------------
+    iterationlimit: integer
+        maximum number of velocity inferences to make
+
+    Returns
+    -------
+    inferred_velocities: 1D numpy array
+        array containing all the inferred velocities. [velocity output in px/frame]
+
+    Notes
+    -----
+    :: velocity is currently estimated assuming that the spatial seperation between spatial channels/pixels is constant.
+    :: This may need to be refined in the future.
+    '''
+    #initialise
+    more_data=True
+    i = 0
+    inferred_velocities = np.zeros(iterationlimit)
+    inferred_velocities[:] = np.nan
+    #loop until there is no more data
+    while more_data:
+        #take slices of time-series
+        sliced_ts1 = ts1[i:i+N]
+        sliced_ts1 = ts2[i:i+N]
+        #cross-correlate ts slices and infer velocity
+        ccf,tau = calc_ccf(sliced_ts1,sliced_ts1,plot_bool=False)
+        velocity, maxcorr = infer_1D_velocity(ccf,tau,spatial_seperation,correlation_threshold)
+        #store velocity in array
+        inferred_velocities[int(i/N)] = velocity
+        #move the current starting point
+        i = i + N
+        # abort loop if there is not enough data left in the time-series
+        if i > len(ts1): more_data = False
+        # abort if iterationlimit is exceeded
+        if i/N > iterationlimit: more_data = False
+    return inferred_velocities
+
 ######################################################################################################################
 ######################################################################################################################
 # core cctde functions
