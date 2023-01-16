@@ -8,7 +8,6 @@ from scipy import signal
 from scipy.signal import butter,filtfilt
 from scipy.ndimage import gaussian_filter
 
-
 ######################################################################################################################
 ######################################################################################################################
 # helper functions
@@ -26,17 +25,27 @@ def calc_norm_factor(f,g):
     norm_factor = np.sqrt(sumsquare_f*sumsquare_g)
     return norm_factor
 
-def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False):
+def calc_sampling_time(times):
+#Calculates average time-between-samples from an array of sample times.
+    t_sampling = np.mean(np.diff(times))
+    return t_sampling
+
+def calc_distance(R1,R2,z1,z2):
+#Calculates the distance between two locations (R1,z1) and (R2,z2).
+    distance = np.sqrt((R2-R1)**2 + (z2-z1)**2)
+    return distance
+
+def analyse_consecutive_clips(sig1,sig2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False):
     '''
     This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
     It returns a one dimensional array of inferred velocities.
 
-    Arguments: (ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False)
+    Arguments: (sig1,sig2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False)
     Returns: inferred_velocities
 
     Parameters
     ----------
-    ts1,ts2 : 1D numpy array
+    sig1,sig2 : 1D numpy array
         two input array to be cross-correlated.
     N: interger
         the length of the individual time-series to be analysed [number of frames]
@@ -70,17 +79,17 @@ def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold
     #loop until there is no more data
     while more_data:
         #take slices of time-series
-        sliced_ts1 = ts1[i:i+N]
-        sliced_ts2 = ts2[i:i+N]
+        sliced_sig1 = sig1[i:i+N]
+        sliced_sig2 = sig2[i:i+N]
         #cross-correlate ts slices and infer velocity
-        ccf,tau = calc_ccf(sliced_ts1,sliced_ts2,plot_bool=plot_bool)
+        ccf,tau = calc_ccf(sliced_sig1,sliced_sig2,plot_bool=plot_bool)
         velocity, maxcorr = infer_1D_velocity(ccf,tau,spatial_seperation,correlation_threshold)
         #store velocity in array
         inferred_velocities[int(i/N)] = velocity
         #move the current starting point
         i = i + N
         # abort loop if there is not enough data left in the time-series
-        if i > len(ts1): more_data = False
+        if i > len(sig1): more_data = False
         # abort if iterationlimit is exceeded
         if i/N > iterationlimit: more_data = False
     return inferred_velocities
@@ -153,27 +162,27 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
         plt.show()
     return ccf,lags
 
-def infer_1D_velocity(ccf,lags,spatial_seperation,correlation_threshold):
+def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
     '''
-    Infers velocity in one direction from a cross-correlation function and spatial seperation.
-    Arguments: (ccf,lags,spatial_seperation,correlation_threshold)
+    Infers velocity in one direction from a cross-correlation function. 
+    Arguments: (ccf,lags,t_sampling,distance,correlation_threshold)
     Returns: velocity,correlation_max
 
     Parameters
     ----------
-    ccf : 1D numpy array
-        Cross-correlation function.
-    lags : 1D numpy array
-        time-lags associated with ccf. Should be given in [frames]
-    spatial_seperation : integer
-        the spatial seperation between the two time-series of the ccf. Given in number of spatial channels [px].
+    sig1,sig2 : 1D numpy array
+        two input array to be cross-correlated.
+    times : 1D numpy array
+        array containing times at which samples were taken. Assumed to be the same for sig1 and sig2. Assumed to be in [s]
+    R1,R2,z1,z2 : floats
+        R- and z-locations of sig1 and sig2. Distances expected to be in [m]
     correlation_threshold : float between 0 and 1
         defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
 
     Returns
     -------
     velocity : float
-        the inferred velocity in [px/frame].
+        the inferred velocity [km/s].
     correlation_max : float
         the peak correlation value used to infer velocity.
 
@@ -181,7 +190,9 @@ def infer_1D_velocity(ccf,lags,spatial_seperation,correlation_threshold):
     -----
     :: if np.nan is returned, correlation threshold was not surpassed OR time-lag was equal to zero.
     '''
-    # find the peak of the cross-correlation funstion
+    # calculate ccf 
+    ccf,lags = calc_ccf(sig1,sig2)
+    # find the peak of the cross-correlation function
     correlation_max = np.max(ccf)
     # correlation peak must exceed correlation threshold
     if correlation_max>correlation_threshold:
@@ -193,15 +204,91 @@ def infer_1D_velocity(ccf,lags,spatial_seperation,correlation_threshold):
             #manually set velocity to nan
             velocity = np.nan
         else:
+            #calculate unit conversion factors
+            distance = calc_distance(R1,R2,z1,z2)
+            t_sampling = calc_sampling_time(times)
             #calculate velocity
-            velocity = spatial_seperation/time_delay
+            velocity = 1./time_delay * (distance/t_sampling)/1000.
     else:
         # set veloity to nan if below correlation threshold
         velocity = np.nan
     return velocity,correlation_max
 
-def infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_threshold):
+def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_threshold,iterationlimit = 10000):
     '''
+    This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
+    It returns a one dimensional array of inferred velocities and corresponding times.
+
+    Arguments: (sig1,sig2,times,R1,R2,z1,z2,N,correlation_threshold,iterationlimit = 10000)
+    Returns: inferred_velocities,inference_times
+
+    Parameters
+    ----------
+    sig1,sig2 : 1D numpy array
+        two input array to be cross-correlated.
+    N: integer
+        the length of the individual time-series to be analysed [number of frames]
+    times : 1D numpy array
+        array containing times at which samples were taken. Assumed to be the same for sig1 and sig2. Assumed to be in [s]
+    R1,R2,z1,z2 : floats
+        R- and z-locations of sig1 and sig2. Distances expected to be in [m]
+    correlation_threshold: float
+        threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+
+    Keyword arguments
+    -----------------
+    iterationlimit: integer
+        maximum number of velocity inferences to make
+
+    Returns
+    -------
+    inferred_velocities: 1D numpy array
+        array containing all the inferred velocities. [velocity output in km/s]
+    inference_times: 1D numpy array
+        contains the times at which the velocity inferences were taken. Times taken as the middle of the time-series. Measured in [s].
+
+    Notes
+    -----
+    :: 
+    '''
+    #initialise
+    more_data=True
+    i = 0
+    inferred_velocities = np.zeros(iterationlimit)
+    inferred_velocities[:] = np.nan
+    inference_times = np.zeros(iterationlimit)
+    inference_times[:] = np.nan
+    #loop until there is no more data
+    while more_data:
+        #take slices of time-series
+        sliced_sig1 = sig1[i:i+N]
+        sliced_sig2 = sig2[i:i+N]
+        sliced_times = times[i:i+N]
+        #cross-correlate ts slices and infer velocity
+        velocity, maxcorr = infer_1D_velocity(sliced_sig1,sliced_sig2,sliced_times,R1,R2,z1,z2,correlation_threshold)
+        #store velocity in array
+        inferred_velocities[int(i/N)] = velocity
+        inference_times[int(i/N)] = np.mean(sliced_times)
+        #move the current starting point
+        i = i + N
+        # abort loop if there is not enough data left in the time-series
+        if i > len(sig1): more_data = False
+        # abort if iterationlimit is exceeded
+        if i/N > iterationlimit: more_data = False
+    return inferred_velocities,inference_times
+
+######################################################################################################################
+######################################################################################################################
+# scripts in development or deprecated
+######################################################################################################################
+######################################################################################################################
+
+
+def depr_infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_threshold):
+    '''
+
+    Deprecated code!
+
     Infers velocity in 2D plane at a specified reference point.
     Arguments: (time_series,ref_location,spatial_seperation,correlation_threshold)
     Returns: velocities,correlations
@@ -245,3 +332,4 @@ def infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_th
     velocities = (x_vel,y_vel)
     correlations = (x_correlation,y_correlation)
     return velocities,correlations
+
