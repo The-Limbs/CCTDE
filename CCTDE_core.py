@@ -26,8 +26,6 @@ def calc_norm_factor(f,g):
     norm_factor = np.sqrt(sumsquare_f*sumsquare_g)
     return norm_factor
 
-
-
 def analyse_consecutive_clips(ts1,ts2,N,spatial_seperation,correlation_threshold,iterationlimit = 10000,plot_bool= False):
     '''
     This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
