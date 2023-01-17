@@ -396,5 +396,3 @@ def subplotsBES(shotn, data=None, time=None, R=None, z=None,
         print('savePath undefined. Did not save figure.')
         pass   
     return
-
-print('done!')
