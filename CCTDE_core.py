@@ -195,10 +195,9 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
     #initialise
     more_data=True
     i = 0
-    inferred_velocities = np.zeros(iterationlimit)
-    inferred_velocities[:] = np.nan
-    inference_times = np.zeros(iterationlimit)
-    inference_times[:] = np.nan
+    arr_length = int(len(sig1)/N) +1
+    inferred_velocities = np.full(arr_length,np.nan)
+    inference_times = np.full(arr_length,np.nan)
     #loop until there is no more data
     while more_data:
         #take slices of time-series
