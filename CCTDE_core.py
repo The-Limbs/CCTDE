@@ -35,6 +35,26 @@ def calc_distance(R1,R2,z1,z2):
     distance = np.sqrt((R2-R1)**2 + (z2-z1)**2)
     return distance
 
+def reverse_direction_check(i1,i2,z1,z2):
+    if i2>i1:
+        if z2>z1:
+            reflect_bool = False
+        elif z1>z2:
+            reflect_bool = True
+        else:
+            print('zero error. abort.')
+            print(1/0)
+    elif i1>i2:
+        if z2>z1:
+            reflect_bool = False
+        elif z1>z2:
+            reflect_bool = True
+        else:
+            print('zero error. abort.')
+            print(1/0)
+    return reflect_bool
+
+
 ######################################################################################################################
 ######################################################################################################################
 # core cctde functions
@@ -133,26 +153,31 @@ def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
     '''
     # calculate ccf 
     ccf,lags = calc_ccf(sig1,sig2)
-    # find the peak of the cross-correlation function
-    correlation_max = np.max(ccf)
-    # correlation peak must exceed correlation threshold
-    if correlation_max>correlation_threshold:
-        #find time-delay at ccf peak
-        index=np.where(np.max(ccf)==ccf)[0][0]
-        time_delay = lags[index]
-        #account for zero-time delay scenario
-        if time_delay == 0.:
-            #manually set velocity to nan
-            velocity = np.nan
-        else:
-            #calculate unit conversion factors
-            distance = calc_distance(R1,R2,z1,z2)
-            t_sampling = calc_sampling_time(times)
-            #calculate velocity
-            velocity = 1./time_delay * (distance/t_sampling)/1000.
-    else:
-        # set veloity to nan if below correlation threshold
+    # check if ccf is empty
+    if len(ccf) == 0:
         velocity = np.nan
+        correlation_max = np.nan
+    else:
+        # find the peak of the cross-correlation function
+        correlation_max = np.max(ccf)
+        # correlation peak must exceed correlation threshold
+        if correlation_max>correlation_threshold:
+            #find time-delay at ccf peak
+            index=np.where(np.max(ccf)==ccf)[0][0]
+            time_delay = lags[index]
+            #account for zero-time delay scenario
+            if time_delay == 0.:
+                #manually set velocity to nan
+                velocity = np.nan
+            else:
+                #calculate unit conversion factors
+                distance = calc_distance(R1,R2,z1,z2)
+                t_sampling = calc_sampling_time(times)
+                #calculate velocity
+                velocity = 1./time_delay * (distance/t_sampling)/1000.
+        else:
+            # set veloity to nan if below correlation threshold
+            velocity = np.nan
     return velocity,correlation_max
 
 def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_threshold,iterationlimit = 10000):
@@ -215,6 +240,49 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         if i > len(sig1): more_data = False
         # abort if iterationlimit is exceeded
         if i/N > iterationlimit: more_data = False
+    return inferred_velocities,inference_times
+
+
+
+def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
+    '''
+    Scans field of view and performs velocimetry along the z (i) direction.
+    Scan channel numbers can be specified in both i and j
+    Currently only supports channel seperation of one.
+
+    Arguments: (signals,time,j_range,i_range,R,z,N,correlation_threshold)
+    Returns: inferred_velocities,inference_times
+
+    Variables: 
+    ----------
+    signals: 3D numpy array [channel_i,channel_j,time]
+        The signals to be analysed. Time assumed to be in seconds
+    time: 1D numpy array [time]
+        The times at which the signal datapoints were sampled.
+        Time assumed to be in seconds.
+    j_range,i_range: list or numpy array of integers
+        The j/i channels to be scanned.
+        j_range can include 0 to 7 including
+        i_range can include 0 to 6 including
+    R,z : 2D numpy array
+        the R,z coordinates corresponding to the j,i channel numbers.
+    N: integer 
+        the length of the individual time-series to be analysed [number of frames]
+    correlation_threshold: float
+        threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+    '''
+    inferred_velocities = np.full((8,8,int(len(time)/N)+1),np.nan)
+    for j in j_range:
+        for i in i_range:
+            j1,j2 = (j,j)
+            i1,i2 = (i,i+1)
+            sig1 = signals[i1,j1]
+            R1,z1 = (R[i1,j1],z[i1,j1])
+            sig2 = signals[i2,j2]
+            R2,z2 = (R[i2,j2],z[i2,j2])
+            velocities_one_channel,inference_times = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold)
+            if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
+            inferred_velocities[i,j,:] = velocities_one_channel
     return inferred_velocities,inference_times
 
 ######################################################################################################################
