@@ -54,7 +54,6 @@ def reverse_direction_check(i1,i2,z1,z2):
             print(1/0)
     return reflect_bool
 
-
 ######################################################################################################################
 ######################################################################################################################
 # core cctde functions
@@ -156,7 +155,7 @@ def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
     # check if ccf is empty
     if len(ccf) == 0:
         velocity = np.nan
-        correlation_max = np.nan
+        correlation_max = 0.
     else:
         # find the peak of the cross-correlation function
         correlation_max = np.max(ccf)
@@ -222,6 +221,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
     i = 0
     arr_length = int(len(sig1)/N) +1
     inferred_velocities = np.full(arr_length,np.nan)
+    inferred_correlations = np.full(arr_length,np.nan)
     inference_times = np.full(arr_length,np.nan)
     #loop until there is no more data
     while more_data:
@@ -233,6 +233,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         velocity, maxcorr = infer_1D_velocity(sliced_sig1,sliced_sig2,sliced_times,R1,R2,z1,z2,correlation_threshold)
         #store velocity in array
         inferred_velocities[int(i/N)] = velocity
+        inferred_correlations[int(i/N)] = maxcorr
         inference_times[int(i/N)] = np.mean(sliced_times)
         #move the current starting point
         i = i + N
@@ -240,7 +241,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         if i > len(sig1): more_data = False
         # abort if iterationlimit is exceeded
         if i/N > iterationlimit: more_data = False
-    return inferred_velocities,inference_times
+    return inferred_velocities,inference_times,inferred_correlations
 
 
 
@@ -272,6 +273,7 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
         threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
     '''
     inferred_velocities = np.full((8,8,int(len(time)/N)+1),np.nan)
+    inferred_correlations = np.full((8,8,int(len(time)/N)+1),0.)
     for j in j_range:
         for i in i_range:
             j1,j2 = (j,j)
@@ -280,10 +282,130 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
             R1,z1 = (R[i1,j1],z[i1,j1])
             sig2 = signals[i2,j2]
             R2,z2 = (R[i2,j2],z[i2,j2])
-            velocities_one_channel,inference_times = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold)
+            velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold)
             if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
             inferred_velocities[i,j,:] = velocities_one_channel
-    return inferred_velocities,inference_times
+            inferred_correlations[i,j,:] = correlations_one_channel
+    return inferred_velocities,inference_times,inferred_correlations
+
+######################################################################################################################
+######################################################################################################################
+# basic CCTDE analysis functions
+######################################################################################################################
+######################################################################################################################
+
+def velocity_averaging(velocities,correlations,time_average = True,z_average = False,weighted=True):
+    '''
+    Averages inferred_velocitied array from vel_scan functions in CCTDE_core.py
+    Arguments: (velocities,correlations,time_average = True,z_average = False,weighted=True)
+    Returns: avg_velocities,stdevs,median_velocities,mads
+
+    Variables:
+    ----------
+    velocities: 3D numpy array [i,j,time]
+        containins the inferred CCTDE velocities
+    correlations: 3D numpy array [i,j,time]
+        contains the correlation values corresponding to the inferred velocities
+    
+    Keyword arguments: 
+    ------------------
+    time_average: boolean
+        average over time axis?
+        Defaults to True
+    z_average: boolean
+        average over z spatial axis?
+        Defaults to False
+    weighted: boolean
+        weight the averaging according to supplied correlations
+        Defaults to True
+
+    Returns:
+    --------
+    avg_velocities: numpy array
+        average velocities.
+        shape depends on what axes have been averaged over.
+    stdevs: numpy array
+        velocity standard deviation
+        shape depends on what axes have been averaged over.
+    median_velocities: numpy array
+        median velocities
+        shape depends on what axes have been averaged over.
+    mads: numpy array
+        median absolute deviations
+        shape depends on what axes have been averaged over.
+
+    Notes:
+    ------
+    :: 
+    '''
+    # need to take the reciprocal to get proper averaging of the time-lags from CCTDE.
+    # straight averaging would give skewed results.
+    reciprocal_velocities = np.divide(1.,velocities)
+    # calculate weighted averages
+    if weighted: 
+        if time_average and z_average:
+            # mask array where there are nans
+            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+            # take average velocity
+            reciprocal_avg_velocities = np.ma.average(masked,axis = (0,2),weights=correlations)
+            # take median velocity
+            reciprocal_median_velocities = np.ma.median(masked,axis = (0,2))
+            # take standard deviation
+            reciprocal_stdevs = np.ma.std(masked,axis = (0,2))
+            # calsulate median absolute deviation
+            abs_median_devs = np.abs(masked - reciprocal_median_velocities[np.newaxis,...,np.newaxis])
+            reciprocal_mads = np.ma.median(abs_median_devs,axis = (0,2))
+        if time_average and not z_average:
+            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+            reciprocal_avg_velocities = np.ma.average(masked,axis = 2,weights=correlations)
+            reciprocal_stdevs = np.ma.std(masked,axis = 2)
+            reciprocal_median_velocities = np.ma.median(masked,axis = 2)
+            abs_median_devs = np.abs(masked - reciprocal_median_velocities[...,np.newaxis])
+            reciprocal_mads = np.ma.median(abs_median_devs,axis = 2)
+        if z_average and not time_average:
+            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+            reciprocal_avg_velocities = np.ma.average(masked,axis = 0,weights=correlations)
+            reciprocal_median_velocities = np.ma.median(masked,axis = 0)
+            reciprocal_stdevs = np.ma.std(masked,axis = 0)
+            abs_median_devs = np.abs(masked - reciprocal_median_velocities[...,np.newaxis])
+            reciprocal_mads = np.ma.median(abs_median_devs,axis = 0)
+    # calculate unweighted averages
+    elif not weighted:
+        if time_average and z_average:
+            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = (0,2))
+            reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = (0,2))
+            reciprocal_stdevs = np.nanstd(reciprocal_velocities,axis = (0,2))
+            abs_median_devs = np.abs(reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...,np.newaxis])
+            reciprocal_mads = np.nanmedian(abs_median_devs,axis = (0,2))
+        if time_average and not z_average:
+            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 2)
+            eciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 2)
+            reciprocal_stdevs = np.nanstd(reciprocal_velocities,axis = 2)
+            abs_median_devs = np.abs(reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...])
+            reciprocal_mads = np.nanmedian(abs_median_devs,axis = 2)
+        if z_average and not time_average:
+            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 0)
+            eciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 0)
+            reciprocal_stdevs = np.nanstd(reciprocal_velocities,axis = 0)
+            abs_median_devs = np.abs(reciprocal_velocities - reciprocal_median_velocities[...,np.newaxis])
+            reciprocal_mads = np.nanmedian(abs_median_devs,axis = 0)
+    else:
+        print('Weighted bool passed incorrectly. Abort.')
+        print(1/0)
+    # convert from reciprocal space back to normal space
+    avg_velocities = np.divide(1.,reciprocal_avg_velocities)
+    median_velocities = np.divide(1.,reciprocal_median_velocities)
+    stdevs = np.divide(1.,reciprocal_stdevs)
+    mads = np.divide(1.,reciprocal_mads)
+    return avg_velocities,stdevs,median_velocities,mads
+
+######################################################################################################################
+######################################################################################################################
+# plotting functions
+######################################################################################################################
+######################################################################################################################
+
+
 
 ######################################################################################################################
 ######################################################################################################################
