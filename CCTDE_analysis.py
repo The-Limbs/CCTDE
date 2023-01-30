@@ -127,7 +127,7 @@ def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tli
     plotting_velocities = velocities[i,j,:]
     #plot velocities against time
     plt.figure(figsize=(10,8))
-    plt.plot(times,plotting_velocities,ls='',marker='.')
+    plt.plot(times,plotting_velocities,ls='-',marker='.')
     plt.xlabel('Time [s]')
     plt.ylabel('Inferred velocity [km/s]')
     plt.title('Shotno:{0}, N: {3}, Velocity from channel {1} to {2}'.format(shotn,(i,j),(i+1,j),N))
