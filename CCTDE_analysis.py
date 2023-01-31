@@ -122,7 +122,7 @@ def velocity_averaging(velocities,correlations,time_average = True,z_average = F
 ###########################################################################################
 ###########################################################################################
 
-def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tlim = 'all'):
+def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tlim = 'all',plot_average='median'):
     #pick velocity timeseries at one location
     plotting_velocities = velocities[i,j,:]
     #plot velocities against time
@@ -142,6 +142,14 @@ def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tli
     else:
         mint,maxt = tlim
         plt.xlim(mint,maxt)
+    if plot_average == 'median':
+        median = np.nanmedian(plotting_velocities)
+        plt.hlines(median,np.min(times),np.max(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
+        plt.legend()
+    elif plot_average == 'mean':
+        mean = np.nanmean(plotting_velocities)
+        plt.hlines(mean,np.min(times),np.max(times),ls='--',label= 'mean: {0:.3f}km/s'.format(mean))
+        plt.legend()
     plt.show()
     return
 
