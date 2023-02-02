@@ -148,7 +148,13 @@ def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tli
         plt.legend()
     elif plot_average == 'mean':
         mean = np.nanmean(plotting_velocities)
-        plt.hlines(mean,np.min(times),np.max(times),ls='--',label= 'mean: {0:.3f}km/s'.format(mean))
+        plt.hlines(mean,np.min(times),np.max(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
+        plt.legend()
+    elif plot_average == 'both':
+        median = np.nanmedian(plotting_velocities)
+        plt.hlines(median,np.min(times),np.max(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
+        mean = np.nanmean(plotting_velocities)
+        plt.hlines(mean,np.min(times),np.max(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
         plt.legend()
     plt.show()
     return
