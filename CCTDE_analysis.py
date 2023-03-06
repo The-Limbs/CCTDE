@@ -13,7 +13,7 @@ def velocity_averaging(velocities,correlations,time_average = True,z_average = F
     '''
     Averages inferred_velocitied array from vel_scan functions in CCTDE_core.py
     Arguments: (velocities,correlations,time_average = True,z_average = False,weighted=True)
-    Returns: avg_velocities,stdevs,median_velocities,mads
+    Returns: avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
 
     Variables:
     ----------
@@ -255,12 +255,12 @@ def acceleration_filter(velocities,inference_times,max_acceleration,plot_bool = 
 ###########################################################################################
 ###########################################################################################
 
-def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tlim = 'all',plot_average='median'):
+def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tlim = 'all',plot_average='median', linest = '-'):
     #pick velocity timeseries at one location
     plotting_velocities = velocities[i,j,:]
     #plot velocities against time
     plt.figure(figsize=(10,8))
-    plt.plot(times,plotting_velocities,ls='-',marker='.')
+    plt.plot(times,plotting_velocities,ls=linest,marker='.')
     plt.xlabel('Time [s]')
     plt.ylabel('Inferred velocity [km/s]')
     plt.title('Shotno:{0}, N: {3} \n Velocity from channel {1} to {2}'.format(shotn,(i,j),(i+1,j),N))
