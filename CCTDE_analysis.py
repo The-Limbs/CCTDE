@@ -2,17 +2,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 warnings.simplefilter('ignore')
-print('Note: RuntimeWarnings are currently ignored')
+print('Note: RuntimeWarnings are currently ignored in CCTDE_analysis')
 
 ######################################################################################################################
 ######################################################################################################################
 # basic CCTDE analysis functions
 ######################################################################################################################
 ######################################################################################################################
-def velocity_averaging(velocities,correlations,time_average = True,z_average = False,weighted=True):
+
+def reciprocal_velocity_averaging(velocities,time_average = True,z_average = False):
     '''
-    Averages inferred_velocitied array from vel_scan functions in CCTDE_core.py
-    Arguments: (velocities,correlations,time_average = True,z_average = False,weighted=True)
+    Averages velocities array in reciprocal space
+    Arguments: (velocities,time_average = True,z_average = False)
     Returns: avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
 
     Variables:
@@ -30,160 +31,210 @@ def velocity_averaging(velocities,correlations,time_average = True,z_average = F
     z_average: boolean
         average over z spatial axis?
         Defaults to False
-    weighted: boolean
-        weight the averaging according to supplied correlations
-        Defaults to True
 
     Returns:
     --------
     avg_velocities: numpy array
         average velocities.
         shape depends on what axes have been averaged over.
-    stdevs: numpy array
-        velocity standard deviation
+    pos/neg_stdev: numpy array
+        'standard' deviation of velocities above/below mean
         shape depends on what axes have been averaged over.
     median_velocities: numpy array
         median velocities
         shape depends on what axes have been averaged over.
-    mads: numpy array
-        median absolute deviations
+    pos/neg_mads: numpy array
+        median absolute deviations above/below median
+        shape depends on what axes have been averaged over.
+
+    Notes:
+    ------
+    :: Expects specifically the velocity array from vel_scan() in CCTDE_core.py
+    '''
+    # need to take the reciprocal to get proper averaging of the time-lags from CCTDE.
+    # straight averaging would give skewed results.
+    reciprocal_velocities = np.divide(1.,velocities)
+    if time_average and z_average: 
+        #take time and z-averages
+        reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = (0,2))
+        reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = (0,2))
+        # calculate deviations above and below the reciprocal mean
+        reciprocal_devs_from_mean = reciprocal_velocities - reciprocal_avg_velocities[np.newaxis,...,np.newaxis]
+        reciprocal_positive_devs_from_mean = np.where(reciprocal_devs_from_mean>0.,reciprocal_devs_from_mean,np.nan)
+        reciprocal_negative_devs_from_mean = np.where(reciprocal_devs_from_mean<0.,reciprocal_devs_from_mean,np.nan)
+        # length of arrays above and below reciprocal mean 
+        N_pos = np.count_nonzero(~np.isnan(reciprocal_positive_devs_from_mean))
+        N_neg = np.count_nonzero(~np.isnan(reciprocal_negative_devs_from_mean))
+        # calculate reciprocal stdevs
+        reciprocal_pos_stdev = np.sqrt(np.nansum(reciprocal_positive_devs_from_mean**2)/N_pos)
+        reciprocal_neg_stdev = np.sqrt(np.nansum(reciprocal_negative_devs_from_mean**2)/N_neg)
+        # calculate reciprocal median absolute deviations
+        reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...,np.newaxis]
+        reciprocal_positive_deviation_from_median = np.abs(np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan))
+        reciprocal_negative_deviation_from_median = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+        reciprocal_pos_mads = np.nanmedian(reciprocal_positive_deviation_from_median,axis= (0,2))
+        reciprocal_neg_mads = np.nanmedian(reciprocal_negative_deviation_from_median,axis= (0,2))
+    elif time_average and not z_average: 
+        #take time average
+        reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 2)
+        reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 2)
+        # calculate deviations above and below the reciprocal mean
+        reciprocal_devs_from_mean = reciprocal_velocities - reciprocal_avg_velocities[...,np.newaxis]
+        reciprocal_positive_devs_from_mean = np.where(reciprocal_devs_from_mean>0.,reciprocal_devs_from_mean,np.nan)
+        reciprocal_negative_devs_from_mean = np.where(reciprocal_devs_from_mean<0.,reciprocal_devs_from_mean,np.nan)
+        # length of arrays above and below reciprocal mean 
+        N_pos = np.count_nonzero(~np.isnan(reciprocal_positive_devs_from_mean))
+        N_neg = np.count_nonzero(~np.isnan(reciprocal_negative_devs_from_mean))
+        # calculate reciprocal stdevs
+        reciprocal_pos_stdev = np.sqrt(np.nansum(reciprocal_positive_devs_from_mean**2)/N_pos)
+        reciprocal_neg_stdev = np.sqrt(np.nansum(reciprocal_negative_devs_from_mean**2)/N_neg)
+        # calculate reciprocal median absolute deviations
+        reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[...,np.newaxis]
+        reciprocal_positive_deviation_from_median = np.abs(np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan))
+        reciprocal_negative_deviation_from_median = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+        reciprocal_pos_mads = np.nanmedian(reciprocal_positive_deviation_from_median,axis= 2)
+        reciprocal_neg_mads = np.nanmedian(reciprocal_negative_deviation_from_median,axis= 2)
+    # convert from reciprocal space back to normal space
+    avg_velocities = np.divide(1.,reciprocal_avg_velocities)
+    median_velocities = np.divide(1.,reciprocal_median_velocities)
+    # apply correct scaling to the errors
+    # note that signs are opposite because of reciprocal
+    pos_stdev = avg_velocities * (reciprocal_neg_stdev/reciprocal_avg_velocities)
+    neg_stdev = avg_velocities * (reciprocal_pos_stdev/reciprocal_avg_velocities)
+    pos_mads = median_velocities * (reciprocal_neg_mads/reciprocal_median_velocities)
+    neg_mads = median_velocities * (reciprocal_pos_mads/reciprocal_median_velocities)
+    return avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
+
+def nonreciprocal_velocity_averaging(velocities,time_average = True,z_average = False):
+    '''
+    Averages velocities array in nonreciprocal space
+    Arguments: (velocities,time_average = True,z_average = False)
+    Returns: avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
+
+    Variables:
+    ----------
+    velocities: 3D numpy array [i,j,time]
+        containins the inferred CCTDE velocities
+    correlations: 3D numpy array [i,j,time]
+        contains the correlation values corresponding to the inferred velocities
+    
+    Keyword arguments: 
+    ------------------
+    time_average: boolean
+        average over time axis?
+        Defaults to True
+    z_average: boolean
+        average over z spatial axis?
+        Defaults to False
+
+    Returns:
+    --------
+    avg_velocities: numpy array
+        average velocities.
+        shape depends on what axes have been averaged over.
+    pos/neg_stdev: numpy array
+        'standard' deviation of velocities above/below mean
+        shape depends on what axes have been averaged over.
+    median_velocities: numpy array
+        median velocities
+        shape depends on what axes have been averaged over.
+    pos/neg_mads: numpy array
+        median absolute deviations above/below median
         shape depends on what axes have been averaged over.
 
     Notes:
     ------
     :: 
     '''
-    # need to take the reciprocal to get proper averaging of the time-lags from CCTDE.
-    # straight averaging would give skewed results.
-    reciprocal_velocities = np.divide(1.,velocities)
-    # calculate weighted averages
-    if weighted: 
-        if time_average and z_average: #checked
-            # mask array where there are nans
-            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
-            # take average velocity
-            reciprocal_avg_velocities = np.ma.average(masked,axis = (0,2),weights=correlations)
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = masked - reciprocal_avg_velocities[np.newaxis,...,np.newaxis]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # take median velocity
-            reciprocal_median_velocities = np.ma.median(masked,axis = (0,2))
-            # calsulate median absolute deviations
-            reciprocal_median_devs = masked - reciprocal_median_velocities[np.newaxis,...,np.newaxis]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= (0,2))
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= (0,2))
-        if time_average and not z_average: #checked
-            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
-            reciprocal_avg_velocities = np.ma.average(masked,axis = 2,weights=correlations)
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = masked - reciprocal_avg_velocities[...,np.newaxis]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # take median velocity
-            reciprocal_median_velocities = np.ma.median(masked,axis = 2)
-            # calsulate median absolute deviations
-            reciprocal_median_devs = masked - reciprocal_median_velocities[...,np.newaxis]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 2)
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 2)
-        if z_average and not time_average: #checked
-            masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
-            reciprocal_avg_velocities = np.ma.average(masked,axis = 0,weights=correlations)
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = masked - reciprocal_avg_velocities[np.newaxis,...]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # take median velocity
-            reciprocal_median_velocities = np.ma.median(masked,axis = 0)
-            # calsulate median absolute deviations
-            reciprocal_median_devs = masked - reciprocal_median_velocities[np.newaxis,...]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 0)
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 0)
-    # calculate unweighted averages
-    elif not weighted:
-        if time_average and z_average: # checked
-            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = (0,2))
-            reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = (0,2))
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[np.newaxis,...,np.newaxis]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # calsulate median absolute deviations
-            reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...,np.newaxis]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= (0,2))
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= (0,2))
-        if time_average and not z_average: # checked
-            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 2)
-            reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 2)
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[...,np.newaxis]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # calsulate median absolute deviations
-            reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[...,np.newaxis]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 2)
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 2)
-        if z_average and not time_average: #checked
-            # calculate mean
-            reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 0)
-            # calculate deviations above and below the mean
-            reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[np.newaxis,...]
-            rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
-            rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
-            N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
-            N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
-            reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
-            reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
-            # calculate median
-            reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 0)
-            # calsulate median absolute deviations
-            reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...]
-            abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
-            abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
-            reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 0)
-            reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 0)
-    else:
-        print('Weighted bool passed incorrectly. Abort.')
-        print(1/0)
-    # convert from reciprocal space back to normal space
-    avg_velocities = np.divide(1.,reciprocal_avg_velocities)
-    median_velocities = np.divide(1.,reciprocal_median_velocities)
-    # apply correct scaling to the errors
-    pos_stdev = avg_velocities * (reciprocal_pos_stdev/reciprocal_avg_velocities)
-    neg_stdev = avg_velocities * (reciprocal_neg_stdev/reciprocal_avg_velocities)
-    pos_mads = median_velocities * (reciprocal_pos_mads/reciprocal_median_velocities)
-    neg_mads = median_velocities * (reciprocal_neg_mads/reciprocal_median_velocities)
+    if time_average and z_average: 
+        #take time and z-averages
+        avg_velocities = np.nanmean(velocities,axis = (0,2))
+        median_velocities = np.nanmedian(velocities,axis = (0,2))
+        # calculate deviations above and below the reciprocal mean
+        devs_from_mean = velocities - avg_velocities[np.newaxis,...,np.newaxis]
+        positive_devs_from_mean = np.where(devs_from_mean>0.,devs_from_mean,np.nan)
+        negative_devs_from_mean = np.where(devs_from_mean<0.,devs_from_mean,np.nan)
+        # length of arrays above and below reciprocal mean 
+        N_pos = np.count_nonzero(~np.isnan(positive_devs_from_mean))
+        N_neg = np.count_nonzero(~np.isnan(negative_devs_from_mean))
+        # calculate reciprocal stdevs
+        pos_stdev = np.sqrt(np.nansum(positive_devs_from_mean**2)/N_pos)
+        neg_stdev = np.sqrt(np.nansum(negative_devs_from_mean**2)/N_neg)
+        # calculate reciprocal median absolute deviations
+        median_devs = velocities - median_velocities[np.newaxis,...,np.newaxis]
+        positive_deviation_from_median = np.where(median_devs>0.,median_devs,np.nan)
+        negative_deviation_from_median = np.where(median_devs<0.,median_devs,np.nan)
+        pos_mads = np.abs(np.nanmedian(positive_deviation_from_median,axis= (0,2)))
+        neg_mads = np.abs(np.nanmedian(negative_deviation_from_median,axis= (0,2)))
+    elif time_average and not z_average: 
+        #take time average
+        avg_velocities = np.nanmean(velocities,axis = 2)
+        median_velocities = np.nanmedian(velocities,axis = 2)
+        # calculate deviations above and below the reciprocal mean
+        devs_from_mean = velocities - avg_velocities[...,np.newaxis]
+        positive_devs_from_mean = np.where(devs_from_mean>0.,devs_from_mean,np.nan)
+        negative_devs_from_mean = np.where(devs_from_mean<0.,devs_from_mean,np.nan)
+        # length of arrays above and below reciprocal mean 
+        N_pos = np.count_nonzero(~np.isnan(positive_devs_from_mean))
+        N_neg = np.count_nonzero(~np.isnan(negative_devs_from_mean))
+        # calculate reciprocal stdevs
+        pos_stdev = np.sqrt(np.nansum(positive_devs_from_mean**2)/N_pos)
+        neg_stdev = np.sqrt(np.nansum(negative_devs_from_mean**2)/N_neg)
+        # calculate reciprocal median absolute deviations
+        median_devs = velocities - median_velocities[...,np.newaxis]
+        positive_deviation_from_median = np.where(median_devs>0.,median_devs,np.nan)
+        negative_deviation_from_median = np.where(median_devs<0.,median_devs,np.nan)
+        pos_mads = np.abs(np.nanmedian(positive_deviation_from_median,axis= 2))
+        neg_mads = np.abs(np.nanmedian(negative_deviation_from_median,axis= 2))
     return avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
+
+def remove_reciprocal_outliers(velocities,threshold):
+    '''
+    Removes outliers in reciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
+    '''
+    reciprocal_vels = 1./velocities
+    # calculate inter-quartile range
+    Q1 = np.nanpercentile(reciprocal_vels,25,interpolation='midpoint')
+    Q3 = np.nanpercentile(reciprocal_vels,75,interpolation='midpoint')
+    iqr = Q3 - Q1
+    #find and set outliers to nan
+    median_reciprocal_vels = np.nanmedian(reciprocal_vels)
+    cleaned_reciprocal_vels = np.where(np.abs(reciprocal_vels-median_reciprocal_vels)<iqr*threshold,reciprocal_vels,np.nan)
+    return 1./cleaned_reciprocal_vels
+
+
+def clean_velocities(inferred_velocities,threshold):
+    '''
+    Sets outliers to NaN of inferred velocities array. Currently only outliers in reciprocal space filtered.
+    Arguments: inferred_velocities,threshold
+    Returns: cleaned_velocities
+
+    Variables:
+    ----------
+    inferred_velocities: 3D numpy array, floats
+        a [8,8,time] array containing velocity inferences.
+    threshold: float
+        Outliers defined as more than IQR*threshold away from median. Outliers found in reciprocal space.
+
+    Returns:
+    --------
+    cleaned_velocities: 3D numpy array, floats
+        same shape as inferred_velocities. Contains velocities with reciprocal outliers removed.
+    '''
+    # set channel numbers to be cleaned
+    i_range = np.arange(7)
+    j_range = np.arange(8)
+    # initialise cleaned array
+    cleaned_velocities = np.full_like(inferred_velocities,np.nan)
+    for i in i_range:
+        for j in j_range:
+            one_channel_velocities = inferred_velocities[i,j,:]
+            # remove outliers in reciprocal space using IQR method
+            cleaned_vels=remove_reciprocal_outliers(one_channel_velocities,threshold)
+            # store cleaned velocities
+            cleaned_velocities[i,j,:] = cleaned_vels
+    return cleaned_velocities
+
 
 def acceleration_filter(velocities,inference_times,max_acceleration,plot_bool = False):
     '''
@@ -249,6 +300,7 @@ def acceleration_filter(velocities,inference_times,max_acceleration,plot_bool = 
         plt.legend()
 
     return filtered_velocities,accelerations
+
 ###########################################################################################
 ###########################################################################################
 # main CCTDE plotting functions
@@ -277,23 +329,25 @@ def plot_vel_time_one_location(velocities,times, i, j, shotn, N,vlim = 'all',tli
         plt.xlim(mint,maxt)
     if plot_average == 'median':
         median = np.nanmedian(plotting_velocities)
-        plt.hlines(median,np.min(times),np.max(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
+        plt.hlines(median,np.nanmin(times),np.nanmax(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
         plt.legend()
     elif plot_average == 'mean':
         mean = np.nanmean(plotting_velocities)
-        plt.hlines(mean,np.min(times),np.max(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
+        plt.hlines(mean,np.nanmin(times),np.nanmax(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
         plt.legend()
     elif plot_average == 'both':
         median = np.nanmedian(plotting_velocities)
-        plt.hlines(median,np.min(times),np.max(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
+        plt.hlines(median,np.nanmin(times),np.nanmax(times),linestyles='--',label= 'median: {0:.3f}km/s'.format(median))
         mean = np.nanmean(plotting_velocities)
-        plt.hlines(mean,np.min(times),np.max(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
+        plt.hlines(mean,np.nanmin(times),np.nanmax(times),linestyles='--',label= 'mean: {0:.3f}km/s'.format(mean))
         plt.legend()
+    elif plot_average == 'none':
+        pass
     plt.show()
     return
 
-def plot_vel_R_avg_time(velocities,times,correlations,i_range,shotn,N,R,z,vlim = 'all',Rlim = 'all',metric='mean',weighted_avg=True):
-    averaged_velocities,pos_stdevs,neg_stdevs,median_velocities,pos_mads,neg_mads = velocity_averaging(velocities,correlations,time_average=True,z_average=False,weighted = weighted_avg)
+def plot_vel_R_avg_time(velocities,times,i_range,shotn,N,R,z,vlim = 'all',Rlim = 'all',metric='mean'):
+    averaged_velocities,pos_stdevs,neg_stdevs,median_velocities,pos_mads,neg_mads = reciprocal_velocity_averaging(velocities,time_average=True,z_average=False)
     plt.figure(figsize=(10,8))
     if metric == 'mean':
         for i in i_range:
@@ -313,7 +367,7 @@ def plot_vel_R_avg_time(velocities,times,correlations,i_range,shotn,N,R,z,vlim =
             plt.fill_between(R[i,:],median_velocities[i,:]-neg_mads[i,:],median_velocities[i,:]+pos_mads[i,:],alpha=0.2)
             plt.ylabel('Inferred velocity [km/s]')
     plt.xlabel('Major radius [m]')
-    plt.title('Shotno:{0}, N: {1} \n Time-averaged: [{2:.2f}-{3:.2f}]s'.format(shotn,N,np.min(times),np.max(times)))
+    plt.title('Shotno:{0}, N: {1} \n Time-averaged: [{2:.2f}-{3:.2f}]s'.format(shotn,N,np.nanmin(times),np.nanmax(times)))
     #set plotting limits if desired
     if vlim == 'all':
         pass
@@ -329,8 +383,8 @@ def plot_vel_R_avg_time(velocities,times,correlations,i_range,shotn,N,R,z,vlim =
     plt.grid()
     return
 
-def plot_vel_R_avg_time_avg_z(velocities,times,correlations,shotn,N,R,vlim = 'all',Rlim = 'all',metric = 'mean', weighted_avg=True):
-    averaged_velocities,pos_stdevs,neg_stdevs,median_velocities,pos_mads,neg_mads = velocity_averaging(velocities,correlations,time_average=True,z_average=True,weighted = weighted_avg)
+def plot_vel_R_avg_time_avg_z(velocities,times,shotn,N,R,vlim = 'all',Rlim = 'all',metric = 'mean'):
+    averaged_velocities,pos_stdevs,neg_stdevs,median_velocities,pos_mads,neg_mads = reciprocal_velocity_averaging(velocities,time_average=True,z_average=True)
     plt.figure(figsize=(10,8))
     if metric == 'mean':
         plt.plot(R[0,:],averaged_velocities,marker='.',label = 'mean',color='b')
@@ -345,7 +399,7 @@ def plot_vel_R_avg_time_avg_z(velocities,times,correlations,shotn,N,R,vlim = 'al
         plt.fill_between(R[0,:],median_velocities-neg_mads,median_velocities+pos_mads,alpha=0.2,color = 'orange')
     plt.xlabel('Major radius [m]')
     plt.ylabel('Inferred velocity [km/s]')
-    plt.title('Shotno:{0}, N: {1} \n z-averaged, Time-averaged: [{2:.2f}-{3:.2f}]s'.format(shotn,N,np.min(times),np.max(times)))
+    plt.title('Shotno:{0}, N: {1} \n z-averaged, Time-averaged: [{2:.2f}-{3:.2f}]s'.format(shotn,N,np.nanmin(times),np.nanmax(times)))
     plt.legend()
     plt.grid()
     #set plotting limits if desired
@@ -361,3 +415,185 @@ def plot_vel_R_avg_time_avg_z(velocities,times,correlations,shotn,N,R,vlim = 'al
         plt.xlim(minR,maxR)
     plt.legend()
     return
+
+###########################################################################################
+###########################################################################################
+# deprecated functions 
+###########################################################################################
+###########################################################################################
+
+# def velocity_averaging(velocities,correlations,time_average = True,z_average = False,weighted=True):
+#     '''
+#     Averages inferred_velocitied array from vel_scan functions in CCTDE_core.py
+#     Arguments: (velocities,correlations,time_average = True,z_average = False,weighted=True)
+#     Returns: avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
+
+#     Variables:
+#     ----------
+#     velocities: 3D numpy array [i,j,time]
+#         containins the inferred CCTDE velocities
+#     correlations: 3D numpy array [i,j,time]
+#         contains the correlation values corresponding to the inferred velocities
+    
+#     Keyword arguments: 
+#     ------------------
+#     time_average: boolean
+#         average over time axis?
+#         Defaults to True
+#     z_average: boolean
+#         average over z spatial axis?
+#         Defaults to False
+#     weighted: boolean
+#         weight the averaging according to supplied correlations
+#         Defaults to True
+
+#     Returns:
+#     --------
+#     avg_velocities: numpy array
+#         average velocities.
+#         shape depends on what axes have been averaged over.
+#     stdevs: numpy array
+#         velocity standard deviation
+#         shape depends on what axes have been averaged over.
+#     median_velocities: numpy array
+#         median velocities
+#         shape depends on what axes have been averaged over.
+#     mads: numpy array
+#         median absolute deviations
+#         shape depends on what axes have been averaged over.
+
+#     Notes:
+#     ------
+#     :: 
+#     '''
+#     # need to take the reciprocal to get proper averaging of the time-lags from CCTDE.
+#     # straight averaging would give skewed results.
+#     reciprocal_velocities = np.divide(1.,velocities)
+#     # calculate weighted averages
+#     if weighted: 
+#         if time_average and z_average: #checked
+#             # mask array where there are nans
+#             masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+#             # take average velocity
+#             reciprocal_avg_velocities = np.ma.average(masked,axis = (0,2),weights=correlations)
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = masked - reciprocal_avg_velocities[np.newaxis,...,np.newaxis]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # take median velocity
+#             reciprocal_median_velocities = np.ma.median(masked,axis = (0,2))
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = masked - reciprocal_median_velocities[np.newaxis,...,np.newaxis]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= (0,2))
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= (0,2))
+#         if time_average and not z_average: #checked
+#             masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+#             reciprocal_avg_velocities = np.ma.average(masked,axis = 2,weights=correlations)
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = masked - reciprocal_avg_velocities[...,np.newaxis]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # take median velocity
+#             reciprocal_median_velocities = np.ma.median(masked,axis = 2)
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = masked - reciprocal_median_velocities[...,np.newaxis]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 2)
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 2)
+#         if z_average and not time_average: #checked
+#             masked = np.ma.MaskedArray(reciprocal_velocities,mask = np.isnan(reciprocal_velocities))
+#             reciprocal_avg_velocities = np.ma.average(masked,axis = 0,weights=correlations)
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = masked - reciprocal_avg_velocities[np.newaxis,...]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # take median velocity
+#             reciprocal_median_velocities = np.ma.median(masked,axis = 0)
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = masked - reciprocal_median_velocities[np.newaxis,...]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 0)
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 0)
+#     # calculate unweighted averages
+#     elif not weighted:
+#         if time_average and z_average: # checked
+#             reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = (0,2))
+#             reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = (0,2))
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[np.newaxis,...,np.newaxis]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...,np.newaxis]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= (0,2))
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= (0,2))
+#         if time_average and not z_average: # checked
+#             reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 2)
+#             reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 2)
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[...,np.newaxis]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[...,np.newaxis]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 2)
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 2)
+#         if z_average and not time_average: #checked
+#             # calculate mean
+#             reciprocal_avg_velocities = np.nanmean(reciprocal_velocities,axis = 0)
+#             # calculate deviations above and below the mean
+#             reciprocal_mean_devs = reciprocal_velocities - reciprocal_avg_velocities[np.newaxis,...]
+#             rec_pos_vel_dev = np.where(reciprocal_mean_devs>0.,reciprocal_mean_devs,np.nan)
+#             rec_neg_vel_dev = np.where(reciprocal_mean_devs<0.,reciprocal_mean_devs,np.nan)
+#             N_pos = np.count_nonzero(~np.isnan(rec_pos_vel_dev))
+#             N_neg = np.count_nonzero(~np.isnan(rec_neg_vel_dev))
+#             reciprocal_pos_stdev = np.sqrt(np.nansum(rec_pos_vel_dev**2)/N_pos)
+#             reciprocal_neg_stdev = np.sqrt(np.nansum(rec_neg_vel_dev**2)/N_neg)
+#             # calculate median
+#             reciprocal_median_velocities = np.nanmedian(reciprocal_velocities,axis = 0)
+#             # calsulate median absolute deviations
+#             reciprocal_median_devs = reciprocal_velocities - reciprocal_median_velocities[np.newaxis,...]
+#             abs_pos_median_devs = np.where(reciprocal_median_devs>0.,reciprocal_median_devs,np.nan)
+#             abs_neg_median_devs = np.abs(np.where(reciprocal_median_devs<0.,reciprocal_median_devs,np.nan))
+#             reciprocal_pos_mads = np.nanmedian(abs_pos_median_devs,axis= 0)
+#             reciprocal_neg_mads = np.nanmedian(abs_neg_median_devs,axis= 0)
+#     else:
+#         print('Weighted bool passed incorrectly. Abort.')
+#         print(1/0)
+#     # convert from reciprocal space back to normal space
+#     avg_velocities = np.divide(1.,reciprocal_avg_velocities)
+#     median_velocities = np.divide(1.,reciprocal_median_velocities)
+#     # apply correct scaling to the errors
+#     pos_stdev = avg_velocities * (reciprocal_pos_stdev/reciprocal_avg_velocities)
+#     neg_stdev = avg_velocities * (reciprocal_neg_stdev/reciprocal_avg_velocities)
+#     pos_mads = median_velocities * (reciprocal_pos_mads/reciprocal_median_velocities)
+#     neg_mads = median_velocities * (reciprocal_neg_mads/reciprocal_median_velocities)
+#     return avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
