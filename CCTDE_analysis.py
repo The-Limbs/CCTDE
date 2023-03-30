@@ -202,8 +202,21 @@ def remove_reciprocal_outliers(velocities,threshold):
     cleaned_reciprocal_vels = np.where(np.abs(reciprocal_vels-median_reciprocal_vels)<iqr*threshold,reciprocal_vels,np.nan)
     return 1./cleaned_reciprocal_vels
 
+def remove_nonreciprocal_outliers(velocities,threshold):
+    '''
+    Removes outliers in reciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
+    '''
+    # calculate inter-quartile range
+    Q1 = np.nanpercentile(velocities,25,interpolation='midpoint')
+    Q3 = np.nanpercentile(velocities,75,interpolation='midpoint')
+    iqr = Q3 - Q1
+    #find and set outliers to nan
+    median_vels = np.nanmedian(velocities)
+    cleaned_vels = np.where(np.abs(velocities-median_vels)<iqr*threshold,velocities,np.nan)
+    return cleaned_vels
 
-def clean_velocities(inferred_velocities,threshold):
+
+def clean_velocities(inferred_velocities,threshold,type='reciprocal'):
     '''
     Sets outliers to NaN of inferred velocities array. Currently only outliers in reciprocal space filtered.
     Arguments: inferred_velocities,threshold
@@ -215,6 +228,13 @@ def clean_velocities(inferred_velocities,threshold):
         a [8,8,time] array containing velocity inferences.
     threshold: float
         Outliers defined as more than IQR*threshold away from median. Outliers found in reciprocal space.
+
+    Keyword arguments:
+    ------------------
+    type: string
+        'reciprocal' - remove outliers in reciprocal space
+        'nonreciprocal' - remove outliers in nonreciprocal space
+        'both' - remove in both spaces
 
     Returns:
     --------
@@ -228,9 +248,15 @@ def clean_velocities(inferred_velocities,threshold):
     cleaned_velocities = np.full_like(inferred_velocities,np.nan)
     for i in i_range:
         for j in j_range:
-            one_channel_velocities = inferred_velocities[i,j,:]
-            # remove outliers in reciprocal space using IQR method
-            cleaned_vels=remove_reciprocal_outliers(one_channel_velocities,threshold)
+            one_channel_velocities = inferred_velocities[i,j,:].copy()
+            if type=='reciprocal':
+                # remove outliers in reciprocal space using IQR method
+                cleaned_vels=remove_reciprocal_outliers(one_channel_velocities,threshold)
+            elif type=='nonreciprocal':
+                cleaned_vels=remove_nonreciprocal_outliers(one_channel_velocities,threshold)
+            else:
+                reciprocal_cleaned_vels=remove_reciprocal_outliers(one_channel_velocities,threshold)
+                cleaned_vels=remove_nonreciprocal_outliers(reciprocal_cleaned_vels,threshold)
             # store cleaned velocities
             cleaned_velocities[i,j,:] = cleaned_vels
     return cleaned_velocities
@@ -399,7 +425,7 @@ def plot_vel_R_avg_time_avg_z(velocities,times,shotn,N,R,vlim = 'all',Rlim = 'al
         plt.fill_between(R[0,:],median_velocities-neg_mads,median_velocities+pos_mads,alpha=0.2,color = 'orange')
     plt.xlabel('Major radius [m]')
     plt.ylabel('Inferred velocity [km/s]')
-    plt.title('Shotno:{0}, N: {1} \n z-averaged, Time-averaged: [{2:.2f}-{3:.2f}]s'.format(shotn,N,np.nanmin(times),np.nanmax(times)))
+    plt.title('Shotno:{0}, N: {1} \n z-averaged, Time-averaged: [{2:.3f}-{3:.3f}]s'.format(shotn,N,np.nanmin(times),np.nanmax(times)))
     plt.legend()
     plt.grid()
     #set plotting limits if desired
