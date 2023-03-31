@@ -122,7 +122,7 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
         plt.show()
     return ccf,lags
 
-def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
+def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold,plot_bool=False):
     '''
     Infers velocity in one direction from a cross-correlation function. 
     Arguments: (ccf,lags,t_sampling,distance,correlation_threshold)
@@ -139,6 +139,12 @@ def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
     correlation_threshold : float between 0 and 1
         defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
 
+    Keyword arguments:
+    ------------------
+    plot_bool: boolean
+        should the CCF be plotted?
+        WARNING! make sure you're not inside several nested loops :)
+        
     Returns
     -------
     velocity : float
@@ -151,7 +157,7 @@ def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
     :: if np.nan is returned, correlation threshold was not surpassed OR time-lag was equal to zero.
     '''
     # calculate ccf 
-    ccf,lags = calc_ccf(sig1,sig2)
+    ccf,lags = calc_ccf(sig1,sig2,plot_bool=plot_bool)
     # check if ccf is empty
     if len(ccf) == 0:
         velocity = np.nan
@@ -177,9 +183,11 @@ def infer_1D_velocity(sig1,sig2,times,R1,R2,z1,z2,correlation_threshold):
         else:
             # set veloity to nan if below correlation threshold
             velocity = np.nan
+    if plot_bool==True:
+        print('Velocity: {0}km/s \n Time: {1}s \n Correlation: {2}'.format(velocity,np.mean(times),correlation_max))
     return velocity,correlation_max
 
-def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_threshold,iterationlimit = 10000):
+def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_threshold,iterationlimit = 10000,plot_bool=False):
     '''
     This function takes two time series and splits them into consecutive, non-overlapping shorter time-series of length N. Each pair of shorter time-series is then cross-correlated and a velocities are inferred.
     It returns a one dimensional array of inferred velocities and corresponding times.
@@ -204,6 +212,9 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
     -----------------
     iterationlimit: integer
         maximum number of velocity inferences to make
+    plot_bool: boolean
+        should the CCF be plotted?
+        WARNING! make sure you're not inside several nested loops :)
 
     Returns
     -------
@@ -230,7 +241,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         sliced_sig2 = sig2[i:i+N]
         sliced_times = times[i:i+N]
         #cross-correlate ts slices and infer velocity
-        velocity, maxcorr = infer_1D_velocity(sliced_sig1,sliced_sig2,sliced_times,R1,R2,z1,z2,correlation_threshold)
+        velocity, maxcorr = infer_1D_velocity(sliced_sig1,sliced_sig2,sliced_times,R1,R2,z1,z2,correlation_threshold,plot_bool=plot_bool)
         #store velocity in array
         inferred_velocities[int(i/N)] = velocity
         inferred_correlations[int(i/N)] = maxcorr
@@ -240,12 +251,14 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         # abort loop if there is not enough data left in the time-series
         if i > len(sig1): more_data = False
         # abort if iterationlimit is exceeded
-        if i/N > iterationlimit: more_data = False
+        if i/N > iterationlimit: 
+            print('iteration limit exceeded!')
+            more_data = False
     return inferred_velocities,inference_times,inferred_correlations
 
 
 
-def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
+def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,plot_bool=False):
     '''
     Scans field of view and performs velocimetry along the z (i) direction.
     Scan channel numbers can be specified in both i and j
@@ -271,6 +284,25 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
         the length of the individual time-series to be analysed [number of frames]
     correlation_threshold: float
         threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+    
+    Keyword arguments:
+    ------------------
+    plot_bool: boolean
+        should the CCF be plotted?
+        WARNING! make sure you're not inside several nested loops :)
+
+    Returns:
+    --------
+    inferred_velocities: np array
+        an [i_range,j_range,time] array containing inferred velocities
+    inference_times: np array 
+        contains the inference times of the velocities
+    inference_correlations: np array 
+        an [i_range,j_range,time] array containing correlation values of inferred velocities
+
+    Notes:
+    ------
+    ::
     '''
     inferred_velocities = np.full((8,8,int(len(time)/N)+1),np.nan)
     inferred_correlations = np.full((8,8,int(len(time)/N)+1),0.)
@@ -282,7 +314,7 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
             R1,z1 = (R[i1,j1],z[i1,j1])
             sig2 = signals[i2,j2]
             R2,z2 = (R[i2,j2],z[i2,j2])
-            velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold)
+            velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold,plot_bool=plot_bool)
             if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
             inferred_velocities[i,j,:] = velocities_one_channel
             inferred_correlations[i,j,:] = correlations_one_channel
@@ -295,52 +327,52 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold):
 ######################################################################################################################
 
 
-def depr_infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_threshold):
-    '''
+# def depr_infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_threshold):
+#     '''
 
-    Deprecated code!
+#     Deprecated code!
 
-    Infers velocity in 2D plane at a specified reference point.
-    Arguments: (time_series,ref_location,spatial_seperation,correlation_threshold)
-    Returns: velocities,correlations
+#     Infers velocity in 2D plane at a specified reference point.
+#     Arguments: (time_series,ref_location,spatial_seperation,correlation_threshold)
+#     Returns: velocities,correlations
 
-    Parameters
-    ----------
-    time_series: 3D numpy array [x-space, y-space, time]
-        a time_series of spatially resolved images.
-    ref_location: a pair of intergers [x_index,y_index]
-        the reference coordinates in the image where the velocity is to be inferred.
-    spatial_seperation : integer
-        the spatial seperation between the two time-series of the ccf. Given in number of spatial channels.
-    correlation_threshold : float between 0 and 1
-        defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
+#     Parameters
+#     ----------
+#     time_series: 3D numpy array [x-space, y-space, time]
+#         a time_series of spatially resolved images.
+#     ref_location: a pair of intergers [x_index,y_index]
+#         the reference coordinates in the image where the velocity is to be inferred.
+#     spatial_seperation : integer
+#         the spatial seperation between the two time-series of the ccf. Given in number of spatial channels.
+#     correlation_threshold : float between 0 and 1
+#         defines the minimum correlation required for velocity inference. If below threshold then velocity defaults to np.nan.
 
-    Returns
-    -------
-    velocities: a pair of floats [x_velocity,y_velocity]
-        inferred velocities at reference location.
-    correlations: a pair of floats [x_correlation,y_correlation]
-        peak amplitude of the correlation function used for velocity inference.
+#     Returns
+#     -------
+#     velocities: a pair of floats [x_velocity,y_velocity]
+#         inferred velocities at reference location.
+#     correlations: a pair of floats [x_correlation,y_correlation]
+#         peak amplitude of the correlation function used for velocity inference.
 
-    Notes
-    -----
-    :: In the current implementation, the selection of the locations is a bit illogical.
-       The reference location should be centered between the locations of the timeseries.
-       Should be changed before application to experiment.
-    '''
-    #select the timeseries
-    i,j = ref_location
-    ref = time_series[i,j,:]
-    x_ts = time_series[i+spatial_seperation,j,:]
-    y_ts = time_series[i,j+spatial_seperation,:]
-    #calculate velocities
-    velocities = np.empty(2)
-    correllations = np.empty(2)
-    x_ccf,x_lags = calc_ccf(ref,x_ts)
-    x_vel,x_correlation=infer_1D_velocity(x_ccf,x_lags,spatial_seperation,correlation_threshold)
-    y_ccf,y_lags = calc_ccf(ref,y_ts)
-    y_vel,y_correlation=infer_1D_velocity(y_ccf,y_lags,spatial_seperation,correlation_threshold)
-    velocities = (x_vel,y_vel)
-    correlations = (x_correlation,y_correlation)
-    return velocities,correlations
+#     Notes
+#     -----
+#     :: In the current implementation, the selection of the locations is a bit illogical.
+#        The reference location should be centered between the locations of the timeseries.
+#        Should be changed before application to experiment.
+#     '''
+#     #select the timeseries
+#     i,j = ref_location
+#     ref = time_series[i,j,:]
+#     x_ts = time_series[i+spatial_seperation,j,:]
+#     y_ts = time_series[i,j+spatial_seperation,:]
+#     #calculate velocities
+#     velocities = np.empty(2)
+#     correllations = np.empty(2)
+#     x_ccf,x_lags = calc_ccf(ref,x_ts)
+#     x_vel,x_correlation=infer_1D_velocity(x_ccf,x_lags,spatial_seperation,correlation_threshold)
+#     y_ccf,y_lags = calc_ccf(ref,y_ts)
+#     y_vel,y_correlation=infer_1D_velocity(y_ccf,y_lags,spatial_seperation,correlation_threshold)
+#     velocities = (x_vel,y_vel)
+#     correlations = (x_correlation,y_correlation)
+#     return velocities,correlations
 
