@@ -3,6 +3,7 @@ from my_funcs import *
 import warnings
 import numpy.ma as ma
 import matplotlib.cm as cm
+import matplotlib
 import multiprocessing as mp
 from scipy import signal
 from scipy.signal import butter,filtfilt
@@ -109,7 +110,10 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
             ccf[i] = ccf[i]*lag_norm
     #plot ccf
     if plot_bool==True:
-        fig,ax=plt.subplots(3)
+        index=np.where(np.max(ccf)==ccf)[0][0]
+        time_delay = lags[index]
+        print('time delay: {0} frames'.format(time_delay))
+        fig,ax=plt.subplots(3,figsize=(8,6))
         ax[0].plot(lags,ccf,'.',ls='-')
         ax[0].set_xlabel('time delay')
         ax[0].set_ylabel('ccf')
@@ -314,6 +318,7 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,plot_boo
             R1,z1 = (R[i1,j1],z[i1,j1])
             sig2 = signals[i2,j2]
             R2,z2 = (R[i2,j2],z[i2,j2])
+            if plot_bool: print('i,j= {0},{1}'.format(i,j))
             velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_1D(sig1,sig2,time,R1,R2,z1,z2,N,correlation_threshold,plot_bool=plot_bool)
             if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
             inferred_velocities[i,j,:] = velocities_one_channel

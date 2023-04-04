@@ -10,6 +10,82 @@ print('Note: RuntimeWarnings are currently ignored in CCTDE_analysis')
 ######################################################################################################################
 ######################################################################################################################
 
+def calc_velocity_mean(velocities,z_average=True,t_average=True):
+    '''
+    Calculates the mean velocity
+    Arguments: (velocities,z_average=True,t_average=True)
+    Returns: mean_vels
+
+    Variables:
+    ----------
+    velocities: 3D np.array of floats
+        contains inferred velocities in shape [z,R,time]
+
+    Keyword arguments:
+    ------------------
+    z_average: boolean
+        average over z-axis?
+    t_average: boolean
+        average over time-axis?
+
+    Returns:
+    --------
+
+    '''
+    if z_average and t_average:
+        mean_vels=np.nanmean(velocities,axis = (0,2))
+    elif z_average and not t_average:
+        mean_vels=np.nanmean(velocities,axis = 0)
+    return mean_vels
+
+def calc_velocity_median(velocities,z_average=True,t_average=True):
+    if z_average and t_average:
+        median_vels=np.nanmedian(velocities,axis = (0,2))
+    elif z_average and not t_average:
+        median_vels=np.nanmedian(velocities,axis = 0)
+    return median_vels
+
+def calc_velocity_reciprocal_mean(velocities,z_average=True,t_average=True):
+    inv_velocities = 1./velocities
+    if z_average and t_average:
+        inv_mean_vels=np.nanmean(inv_velocities,axis = (0,2))
+    elif z_average and not t_average:
+        inv_mean_vels=np.nanmean(inv_velocities,axis = 0)
+    mean_vels = 1./inv_mean_vels
+    return mean_vels
+
+def calc_velocity_reciprocal_median(velocities,z_average=True,t_average=True):
+    inv_velocities = 1./velocities
+    if z_average and t_average:
+        inv_median_vels=np.nanmedian(inv_velocities,axis = (0,2))
+    elif z_average and not t_average:
+        inv_median_vels=np.nanmedian(inv_velocities,axis = 0)
+    median_vels = 1./inv_median_vels
+    return median_vels
+
+def calc_velocity_percentile_limits(velocities,p,z_average=True,t_average=True):
+    if z_average and t_average:
+        # combine axes 0 and 2 (i and time) of inferred_velocities
+        flattened_vels = velocities.swapaxes(1,2).reshape(-1,velocities.shape[1]) # [i and time,j]
+        #initialise storage arrays
+        upper_velocities = np.full(flattened_vels.shape[1],np.nan)
+        lower_velocities = np.full(flattened_vels.shape[1],np.nan)
+        for j in range(flattened_vels.shape[1]):
+            # calculate upper and lower percentiles
+            upper_velocities[j] = np.nanpercentile(flattened_vels[:,j],100.*(1.+p)/2.,interpolation='midpoint')
+            lower_velocities[j] = np.nanpercentile(flattened_vels[:,j],100.*(1.-p)/2.,interpolation='midpoint')
+    elif z_average and not t_average:
+        #initialise storage arrays
+        upper_velocities = np.full((velocities.shape[1],velocities.shape[2]),np.nan)
+        lower_velocities = np.full((velocities.shape[1],velocities.shape[2]),np.nan)
+        for j in range(velocities.shape[1]):
+            for t in range(velocities.shape[2]):
+                # calculate upper and lower percentiles
+                upper_velocities[j,t] = np.nanpercentile(velocities[:,j,t],100.*(1.+p)/2.,interpolation='midpoint')
+                lower_velocities[j,t] = np.nanpercentile(velocities[:,j,t],100.*(1.-p)/2.,interpolation='midpoint')   
+    return upper_velocities,lower_velocities
+
+
 def reciprocal_velocity_averaging(velocities,time_average = True,z_average = False):
     '''
     Averages velocities array in reciprocal space
