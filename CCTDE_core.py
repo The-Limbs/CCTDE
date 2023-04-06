@@ -262,7 +262,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
 
 
 
-def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,plot_bool=False):
+def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,delta_ell = 1,plot_bool=False):
     '''
     Scans field of view and performs velocimetry along the z (i) direction.
     Scan channel numbers can be specified in both i and j
@@ -294,6 +294,8 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,plot_boo
     plot_bool: boolean
         should the CCF be plotted?
         WARNING! make sure you're not inside several nested loops :)
+    delta_ell: integer
+        what should the distance be between analysed channels?
 
     Returns:
     --------
@@ -313,7 +315,7 @@ def z_vel_scan(signals,time,j_range,i_range,R,z,N,correlation_threshold,plot_boo
     for j in j_range:
         for i in i_range:
             j1,j2 = (j,j)
-            i1,i2 = (i,i+1)
+            i1,i2 = (i,i+delta_ell)
             sig1 = signals[i1,j1]
             R1,z1 = (R[i1,j1],z[i1,j1])
             sig2 = signals[i2,j2]
