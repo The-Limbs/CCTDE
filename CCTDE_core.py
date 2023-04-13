@@ -61,7 +61,7 @@ def reverse_direction_check(i1,i2,z1,z2):
 ######################################################################################################################
 ######################################################################################################################
 
-def calc_ccf(f,g,norm_bool = True,plot_bool=False):
+def calc_ccf(f,g,norm_bool = True,plot_bool=False,overlap_mode = 'same'):
     '''
     Returns cross-correlation function and corresponding time-delays of two one-dimenaional arrays.
     Arguments: (f,g,norm_bool = True,plot_bool=False)
@@ -78,6 +78,8 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
         turn cross-correlation function normalisation on or off, defaults to True (on).
     plot_bool : boolean
         option to plot ccf, defaults to False.
+    mode : string
+        can change overlap mode of signal.correlate ['same','full','valid']
 
     Returns
     -------
@@ -96,7 +98,7 @@ def calc_ccf(f,g,norm_bool = True,plot_bool=False):
     f = f - np.mean(f)
     g = g - np.mean(g)
     #calculate unnormalised ccf and lags
-    ccf = signal.correlate(g,f,mode='same',method='fft')
+    ccf = signal.correlate(g,f,mode=overlap_mode,method='fft')
     N = len(ccf)
     lags = np.linspace(-N//2,N//2-1,N)
     if norm_bool==True:
