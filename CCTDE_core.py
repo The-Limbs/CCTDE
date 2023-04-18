@@ -255,7 +255,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,correlation_thres
         #move the current starting point
         i = i + N
         # abort loop if there is not enough data left in the time-series
-        if i > len(sig1): more_data = False
+        if i >= len(sig1): more_data = False
         # abort if iterationlimit is exceeded
         if i/N > iterationlimit: 
             print('iteration limit exceeded!')
