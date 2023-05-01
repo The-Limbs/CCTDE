@@ -263,7 +263,7 @@ def analyse_consecutive_clips_1D(sig1,sig2,times,R1,R2,z1,z2,N,stepsize,correlat
     return inferred_velocities,inference_times,inferred_correlations
 
 
-def z_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold,delta_ell = 1,overlap=0,plot_bool=False):
+def z_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold,delta_ell = 1,plot_bool=False):
     '''
     Scans field of view and performs velocimetry along the z (i) direction.
     Scan channel numbers can be specified in both i and j
@@ -341,7 +341,7 @@ def mp_wrapper(i,j,signals,time,R,z,delta_ell,N,stepsize,correlation_threshold):
     if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
     return i,j,velocities_one_channel,inference_times,correlations_one_channel
 
-def z_vel_scan_parallel(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold,delta_ell = 1,overlap=0,plot_bool=False):
+def z_vel_scan_parallel(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold,delta_ell = 1,plot_bool=False):
     '''
     Scans field of view and performs velocimetry along the z (i) direction.
     Scan channel numbers can be specified in both i and j
@@ -398,8 +398,8 @@ def z_vel_scan_parallel(signals,time,j_range,i_range,R,z,N,stepsize,correlation_
     inferred_correlations = np.asarray(inferred_correlations)
     inference_times= np.asarray(inference_times)
     # reshape arrays
-    inferred_velocities_reshaped = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
-    inferred_correlations_reshaped = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
+    inferred_velocities_reshaped = np.full((R.shape[0],R.shape[1],int(len(time)/stepsize)+1),np.nan)
+    inferred_correlations_reshaped = np.full((R.shape[0],R.shape[1],int(len(time)/stepsize)+1),np.nan)
     for k,i in enumerate(i_indices):
         j = j_indices[k]
         inferred_velocities_reshaped[i,j,:] = inferred_velocities[k,:]
