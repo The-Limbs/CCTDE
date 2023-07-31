@@ -302,6 +302,7 @@ def remove_nonreciprocal_outliers(inferred_velocities,threshold):
     return cleaned_vels
 
 
+
 def clean_velocities(inferred_velocities,threshold,type='reciprocal'):
     '''
     Sets outliers to NaN of inferred velocities array. Currently only outliers in reciprocal space filtered.
@@ -402,7 +403,6 @@ def acceleration_filter(velocities,inference_times,max_acceleration,plot_bool = 
         plt.xlabel('inference times [s]')
         plt.ylabel('inferred velocities [km/s]')
         plt.legend()
-
     return filtered_velocities,accelerations
 
 ###########################################################################################
@@ -519,6 +519,68 @@ def plot_vel_R_avg_time_avg_z(velocities,times,shotn,N,R,vlim = 'all',Rlim = 'al
         plt.xlim(minR,maxR)
     plt.legend()
     return
+
+def rolling_mean(arr,N,stepsize,space='direct'):
+    if space=='direct':
+        mean_arr=rolling_mean_singlearray(arr,N,stepsize)
+        return mean_arr
+    elif space=='reciprocal':
+        # get maximum velocity
+        max_vel = np.nanmax(arr)
+        reciprocal_max_vel = 1./max_vel
+        #flip the array 
+        arr = 1./arr.copy()
+        # take mean of reciprocal velocities
+        mean_arr=rolling_mean_singlearray(arr,N,stepsize)
+        mean_arr=np.where(np.abs(mean_arr)>reciprocal_max_vel,mean_arr,np.nan)
+        # flip the mean velocities to direct space
+        mean_arr = 1./mean_arr.copy()
+        return mean_arr
+    
+def rolling_mean_singlearray(arr,N,stepsize):
+    # initialise an unpacked array 
+    unpacked_arr = np.full((len(arr),N),np.nan)
+    # loop over array indices excluding
+    for i in np.arange(N//2,len(arr)-1-N//2,stepsize):
+        # set start and end indices of array slice. Includes edge cases. 
+        start_index = int(i-N/2)
+        end_index = int(i+N/2)
+        # add array slice to the unpacked array
+        unpacked_arr[i,:] = arr[start_index:end_index]
+    # average over the segments, giving the rolling average
+    mean_arr = np.nanmean(unpacked_arr,axis=1)
+    return mean_arr
+    
+def rolling_median(arr,N,stepsize,space='direct'):
+    if space=='direct':
+        median_arr=rolling_median_singlearray(arr,N,stepsize)
+        return median_arr
+    elif space=='reciprocal':
+        # get maximum velocity
+        max_vel = np.nanmax(arr)
+        reciprocal_max_vel = 1./max_vel
+        #flip the array 
+        arr = 1./arr.copy()
+        # take median of reciprocal velocities
+        median_arr=rolling_median_singlearray(arr,N,stepsize)
+        median_arr=np.where(np.abs(median_arr)>reciprocal_max_vel,median_arr,np.nan)
+        # flip the median velocities to direct space
+        median_arr = 1./median_arr.copy()
+        return median_arr
+
+def rolling_median_singlearray(arr,N,stepsize):
+    # initialise an unpacked array 
+    unpacked_arr = np.full((len(arr),N),np.nan)
+    # loop over array indices excluding
+    for i in np.arange(N//2,len(arr)-1-N//2,stepsize):
+        # set start and end indices of array slice. Includes edge cases. 
+        start_index = int(i-N/2)
+        end_index = int(i+N/2)
+        # add array slice to the unpacked array
+        unpacked_arr[i,:] = arr[start_index:end_index]
+    # average over the segments, giving the rolling average
+    median_arr = np.nanmedian(unpacked_arr,axis=1)
+    return median_arr
 
 ###########################################################################################
 ###########################################################################################
