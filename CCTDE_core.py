@@ -672,7 +672,6 @@ def analyse_consecutive_clips_line(Linedata,times,N,stepsize,ref_j,zz,correlatio
     inference_times = np.full(arr_length,np.nan)
     #loop until there is no more data
     while is_more_data:
-        print(i)
         #take slices of time-series
         Linedata_segment = Linedata[:,i:i+2*N]
         sliced_times = times[i:i+2*N]
@@ -710,7 +709,7 @@ def line_z_vel_scan(BESdata,BEStimes,shotn,RR,zz,N,stepsize,j_indices,max_distan
     #loop over j indices
     for j in j_indices:
         BESdata_line = BESdata[:,j,:]
-        inference_times,inferred_velocities,inferred_velocity_errors=analyse_consecutive_clips_line(BESdata_line,BEStimes,N,stepsize,j,zz,correlation_threshold,max_distance=None,exclude_edges=exclude_edges,plot_bool=False)
+        inference_times,inferred_velocities,inferred_velocity_errors=analyse_consecutive_clips_line(BESdata_line,BEStimes,N,stepsize,j,zz,correlation_threshold,max_distance=max_distance,exclude_edges=exclude_edges,plot_bool=False)
         all_inferred_velocities[j,:] = inferred_velocities
         all_inferred_velocities_err[j,:] = inferred_velocity_errors
         all_inference_times = inference_times.copy()
@@ -724,155 +723,190 @@ def line_z_vel_scan(BESdata,BEStimes,shotn,RR,zz,N,stepsize,j_indices,max_distan
         plt.show()
     return all_inferred_velocities,all_inferred_velocities_err,all_inference_times
 
+def process_j_index(j, BESdata, BEStimes, N, stepsize, zz, correlation_threshold, max_distance=None, exclude_edges=True):
+    BESdata_line = BESdata[:, j, :]
+    inference_times, inferred_velocities, inferred_velocity_errors = analyse_consecutive_clips_line(BESdata_line, BEStimes, N, stepsize, j, zz, correlation_threshold, max_distance=max_distance, exclude_edges=exclude_edges, plot_bool=False)
+    return j, inferred_velocities, inferred_velocity_errors, inference_times
+
+def line_z_vel_scan_parallel(BESdata, BEStimes, shotn, RR, zz, N, stepsize, j_indices, max_distance=None, exclude_edges=True, correlation_threshold='auto', plot_bool=False):
+    all_inferred_velocities = np.full((BESdata.shape[1], (len(BEStimes) - N) // stepsize + 1), np.nan)
+    all_inferred_velocities_err = np.full((BESdata.shape[1], (len(BEStimes) - N) // stepsize + 1), np.nan)
+    all_inference_times = np.full((len(BEStimes) - N + 1) // stepsize, np.nan)
+    
+    if correlation_threshold == 'auto':
+        correlation_threshold = calc_corr_threshold(N, 0.01)
+    elif not np.isnumeric(correlation_threshold):
+        raise ValueError("correlation_threshold is not a number.")
+    
+    num_processes = len(j_indices)
+    pool = mp.Pool(processes=num_processes)
+    
+    results = []
+    for j in j_indices:
+        results.append(pool.apply_async(process_j_index, (j, BESdata, BEStimes, N, stepsize, zz, correlation_threshold, max_distance, exclude_edges)))
+    
+    pool.close()
+    pool.join()
+    
+    for result in results:
+        j, inferred_velocities, inferred_velocity_errors, inference_times = result.get()
+        all_inferred_velocities[j, :] = inferred_velocities
+        all_inferred_velocities_err[j, :] = inferred_velocity_errors
+        all_inference_times = inference_times.copy()
+    
+    if plot_bool:
+        for j in j_indices:
+            plt.plot(all_inference_times * 1000., all_inferred_velocities[j, :], label='R={0:.2f}m'.format(RR[3, j]))
+        plt.legend()
+        plt.title('Overview of line-CCTDE inferred velocities \n shot:#{0},times {1:.2f}-{2:.2f}ms'.format(shotn, np.nanmin(all_inference_times) * 1000., np.nanmax(all_inference_times) * 1000.))
+        plt.ylabel('z-velocity [km/s]')
+        plt.xlabel('time [ms]')
+        plt.show()
+    
+    return all_inferred_velocities, all_inferred_velocities_err, all_inference_times
+
 ######################################################################################################################
 ######################################################################################################################
 # scripts in development or deprecated
 ######################################################################################################################
 ######################################################################################################################
 
+# def R_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold='auto',delta_ell = 1,plot_bool=False):
+#     '''
+#     Scans field of view and performs velocimetry along the R (j) direction.
+#     Scan channel numbers can be specified in both i and j
 
+#     Arguments: (signals,time,j_range,i_range,R,z,N,correlation_threshold)
+#     Returns: inferred_velocities,inference_times
 
-
-
-
-def R_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold='auto',delta_ell = 1,plot_bool=False):
-    '''
-    Scans field of view and performs velocimetry along the R (j) direction.
-    Scan channel numbers can be specified in both i and j
-
-    Arguments: (signals,time,j_range,i_range,R,z,N,correlation_threshold)
-    Returns: inferred_velocities,inference_times
-
-    Variables: 
-    ----------
-    signals: 3D numpy array [channel_i,channel_j,time]
-        The signals to be analysed. Time assumed to be in seconds
-    time: 1D numpy array [time]
-        The times at which the signal datapoints were sampled.
-        Time assumed to be in seconds.
-    j_range,i_range: list or numpy array of integers
-        The j/i channels to be scanned.
-        j_range can include 0 to 7 including
-        i_range can include 0 to 6 including
-    R,z : 2D numpy array
-        the R,z coordinates corresponding to the j,i channel numbers.
-    N: integer 
-        the length of the individual time-series to be analysed [number of frames]
-    stepsize: integer
-        how many frames to step between velocity inferences
-    correlation_threshold: float
-        threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+#     Variables: 
+#     ----------
+#     signals: 3D numpy array [channel_i,channel_j,time]
+#         The signals to be analysed. Time assumed to be in seconds
+#     time: 1D numpy array [time]
+#         The times at which the signal datapoints were sampled.
+#         Time assumed to be in seconds.
+#     j_range,i_range: list or numpy array of integers
+#         The j/i channels to be scanned.
+#         j_range can include 0 to 7 including
+#         i_range can include 0 to 6 including
+#     R,z : 2D numpy array
+#         the R,z coordinates corresponding to the j,i channel numbers.
+#     N: integer 
+#         the length of the individual time-series to be analysed [number of frames]
+#     stepsize: integer
+#         how many frames to step between velocity inferences
+#     correlation_threshold: float
+#         threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
     
-    Keyword arguments:
-    ------------------
-    plot_bool: boolean
-        should the CCF be plotted?
-        WARNING! make sure you're not inside several nested loops :)
-    delta_ell: integer
-        what should the distance be between analysed channels?
+#     Keyword arguments:
+#     ------------------
+#     plot_bool: boolean
+#         should the CCF be plotted?
+#         WARNING! make sure you're not inside several nested loops :)
+#     delta_ell: integer
+#         what should the distance be between analysed channels?
 
-    Returns:
-    --------
-    inferred_velocities: np array
-        an [i_range,j_range,time] array containing inferred velocities
-    inference_times: np array 
-        contains the inference times of the velocities
-    inference_correlations: np array 
-        an [i_range,j_range,time] array containing correlation values of inferred velocities
+#     Returns:
+#     --------
+#     inferred_velocities: np array
+#         an [i_range,j_range,time] array containing inferred velocities
+#     inference_times: np array 
+#         contains the inference times of the velocities
+#     inference_correlations: np array 
+#         an [i_range,j_range,time] array containing correlation values of inferred velocities
 
-    Notes:
-    ------
-    ::
-    '''
-    inferred_velocities = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
-    inferred_correlations = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
-    if correlation_threshold=='auto':
-        correlation_threshold=calc_corr_threshold(N,0.01)
-    for j in j_range:
-        for i in i_range:
-            j1,j2 = (j,j+delta_ell)
-            i1,i2 = (i,i)
-            sig1 = signals[i1,j1]
-            R1,z1 = (R[i1,j1],z[i1,j1])
-            sig2 = signals[i2,j2]
-            R2,z2 = (R[i2,j2],z[i2,j2])
-            if plot_bool: print('i,j= {0},{1}'.format(i,j))
-            velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_two_point(sig1,sig2,time,R1,R2,z1,z2,N,stepsize,correlation_threshold,plot_bool=plot_bool)
-            if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
-            inferred_velocities[i,j,:] = velocities_one_channel
-            inferred_correlations[i,j,:] = correlations_one_channel
-    return inferred_velocities,inference_times,inferred_correlations
+#     Notes:
+#     ------
+#     ::
+#     '''
+#     inferred_velocities = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
+#     inferred_correlations = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
+#     if correlation_threshold=='auto':
+#         correlation_threshold=calc_corr_threshold(N,0.01)
+#     for j in j_range:
+#         for i in i_range:
+#             j1,j2 = (j,j+delta_ell)
+#             i1,i2 = (i,i)
+#             sig1 = signals[i1,j1]
+#             R1,z1 = (R[i1,j1],z[i1,j1])
+#             sig2 = signals[i2,j2]
+#             R2,z2 = (R[i2,j2],z[i2,j2])
+#             if plot_bool: print('i,j= {0},{1}'.format(i,j))
+#             velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_two_point(sig1,sig2,time,R1,R2,z1,z2,N,stepsize,correlation_threshold,plot_bool=plot_bool)
+#             if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
+#             inferred_velocities[i,j,:] = velocities_one_channel
+#             inferred_correlations[i,j,:] = correlations_one_channel
+#     return inferred_velocities,inference_times,inferred_correlations
 
-def z_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold='auto',delta_ell = 1,plot_bool=False):
-    '''
-    Scans field of view and performs velocimetry along the z (i) direction.
-    Scan channel numbers can be specified in both i and j
-    Currently only supports channel seperation of one.
+# def z_vel_scan(signals,time,j_range,i_range,R,z,N,stepsize,correlation_threshold='auto',delta_ell = 1,plot_bool=False):
+#     '''
+#     Scans field of view and performs velocimetry along the z (i) direction.
+#     Scan channel numbers can be specified in both i and j
+#     Currently only supports channel seperation of one.
 
-    Arguments: (signals,time,j_range,i_range,R,z,N,correlation_threshold)
-    Returns: inferred_velocities,inference_times
+#     Arguments: (signals,time,j_range,i_range,R,z,N,correlation_threshold)
+#     Returns: inferred_velocities,inference_times
 
-    Variables: 
-    ----------
-    signals: 3D numpy array [channel_i,channel_j,time]
-        The signals to be analysed. Time assumed to be in seconds
-    time: 1D numpy array [time]
-        The times at which the signal datapoints were sampled.
-        Time assumed to be in seconds.
-    j_range,i_range: list or numpy array of integers
-        The j/i channels to be scanned.
-        j_range can include 0 to 7 including
-        i_range can include 0 to 6 including
-    R,z : 2D numpy array
-        the R,z coordinates corresponding to the j,i channel numbers.
-    N: integer 
-        the length of the individual time-series to be analysed [number of frames]
-    stepsize: integer
-        how many frames to step between velocity inferences
-    correlation_threshold: float
-        threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
+#     Variables: 
+#     ----------
+#     signals: 3D numpy array [channel_i,channel_j,time]
+#         The signals to be analysed. Time assumed to be in seconds
+#     time: 1D numpy array [time]
+#         The times at which the signal datapoints were sampled.
+#         Time assumed to be in seconds.
+#     j_range,i_range: list or numpy array of integers
+#         The j/i channels to be scanned.
+#         j_range can include 0 to 7 including
+#         i_range can include 0 to 6 including
+#     R,z : 2D numpy array
+#         the R,z coordinates corresponding to the j,i channel numbers.
+#     N: integer 
+#         the length of the individual time-series to be analysed [number of frames]
+#     stepsize: integer
+#         how many frames to step between velocity inferences
+#     correlation_threshold: float
+#         threshold of correlation below which the inferred velocity will be ignored. [between 0 and 1]
     
-    Keyword arguments:
-    ------------------
-    plot_bool: boolean
-        should the CCF be plotted?
-        WARNING! make sure you're not inside several nested loops :)
-    delta_ell: integer
-        what should the distance be between analysed channels?
+#     Keyword arguments:
+#     ------------------
+#     plot_bool: boolean
+#         should the CCF be plotted?
+#         WARNING! make sure you're not inside several nested loops :)
+#     delta_ell: integer
+#         what should the distance be between analysed channels?
 
-    Returns:
-    --------
-    inferred_velocities: np array
-        an [i_range,j_range,time] array containing inferred velocities
-    inference_times: np array 
-        contains the inference times of the velocities
-    inference_correlations: np array 
-        an [i_range,j_range,time] array containing correlation values of inferred velocities
+#     Returns:
+#     --------
+#     inferred_velocities: np array
+#         an [i_range,j_range,time] array containing inferred velocities
+#     inference_times: np array 
+#         contains the inference times of the velocities
+#     inference_correlations: np array 
+#         an [i_range,j_range,time] array containing correlation values of inferred velocities
 
-    Notes:
-    ------
-    ::
-    '''
-    inferred_velocities = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
-    inferred_correlations = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
-    if correlation_threshold=='auto':
-        correlation_threshold=calc_corr_threshold(N,0.01)
-    for j in j_range:
-        for i in i_range:
-            j1,j2 = (j,j)
-            i1,i2 = (i,i+delta_ell)
-            sig1 = signals[i1,j1]
-            R1,z1 = (R[i1,j1],z[i1,j1])
-            sig2 = signals[i2,j2]
-            R2,z2 = (R[i2,j2],z[i2,j2])
-            if plot_bool: print('i,j= {0},{1}'.format(i,j))
-            velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_two_point(sig1,sig2,time,R1,R2,z1,z2,N,stepsize,correlation_threshold,plot_bool=plot_bool)
-            if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
-            inferred_velocities[i,j,:] = velocities_one_channel
-            inferred_correlations[i,j,:] = correlations_one_channel
-    return inferred_velocities,inference_times,inferred_correlations
-
-
+#     Notes:
+#     ------
+#     ::
+#     '''
+#     inferred_velocities = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
+#     inferred_correlations = np.full((8,8,int(len(time)/stepsize)+1),np.nan)
+#     if correlation_threshold=='auto':
+#         correlation_threshold=calc_corr_threshold(N,0.01)
+#     for j in j_range:
+#         for i in i_range:
+#             j1,j2 = (j,j)
+#             i1,i2 = (i,i+delta_ell)
+#             sig1 = signals[i1,j1]
+#             R1,z1 = (R[i1,j1],z[i1,j1])
+#             sig2 = signals[i2,j2]
+#             R2,z2 = (R[i2,j2],z[i2,j2])
+#             if plot_bool: print('i,j= {0},{1}'.format(i,j))
+#             velocities_one_channel,inference_times,correlations_one_channel = analyse_consecutive_clips_two_point(sig1,sig2,time,R1,R2,z1,z2,N,stepsize,correlation_threshold,plot_bool=plot_bool)
+#             if reverse_direction_check(i1,i2,z1,z2): velocities_one_channel = np.multiply(velocities_one_channel,-1.)
+#             inferred_velocities[i,j,:] = velocities_one_channel
+#             inferred_correlations[i,j,:] = correlations_one_channel
+#     return inferred_velocities,inference_times,inferred_correlations
 
 # def depr_infer_2D_velocity(time_series,ref_location,spatial_seperation,correlation_threshold):
 #     '''

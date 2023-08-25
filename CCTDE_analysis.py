@@ -181,6 +181,18 @@ def reciprocal_velocity_averaging(velocities,time_average = True,z_average = Fal
     neg_mads = median_velocities * (reciprocal_pos_mads/reciprocal_median_velocities)
     return avg_velocities,pos_stdev,neg_stdev,median_velocities,pos_mads,neg_mads
 
+def find_closest_index(array, val):
+    mask = ~np.isnan(array)  # Create a mask to ignore NaN values
+    valid_values = array[mask]
+    
+    if len(valid_values) == 0:
+        return None  # No valid values to compare
+    
+    absolute_diff = np.abs(valid_values - val)
+    closest_valid_index = np.argmin(absolute_diff)
+    closest_index = np.where(mask)[0][closest_valid_index]
+    return closest_index
+
 def nonreciprocal_velocity_averaging(velocities,time_average = True,z_average = False):
     '''
     Averages velocities array in nonreciprocal space
@@ -269,37 +281,94 @@ def remove_reciprocal_outliers(inferred_velocities,threshold):
     Removes outliers in reciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
     '''
     reciprocal_velocities = 1./inferred_velocities
-    # combine axes 0 and 2 (i and time) of inferred_velocities
-    flattened_vels = reciprocal_velocities.swapaxes(1,2).reshape(-1,reciprocal_velocities.shape[1]) # [i and time,j]
+    if len(inferred_velocities.shape) == 3:
+        # combine axes 0 and 2 (i and time) of inferred_velocities
+        flattened_vels = reciprocal_velocities.swapaxes(1,2).reshape(-1,reciprocal_velocities.shape[1]) # [i and time,j]
+        median_vels = np.nanmedian(reciprocal_velocities,axis=(0,2))
+    elif len(inferred_velocities.shape)==2:
+        #no flattening needed 
+        flattened_vels= reciprocal_velocities.copy()
+        median_vels = np.nanmedian(reciprocal_velocities,axis=(1))
+        pass
+    else:
+        print('Unusual velocity array shape. Please check code')
+        print('Shape is:',inferred_velocities.shape)
     # initialise loop over j
-    median_vels = np.nanmedian(reciprocal_velocities,axis=(0,2))
+
     cleaned_vels = np.full(reciprocal_velocities.shape,np.nan)
-    for j in range(flattened_vels.shape[1]):
-        # calculate inter-quartile range over i and time dimensions
-        Q1 = np.nanpercentile(flattened_vels[:,j],25,interpolation='midpoint')
-        Q3 = np.nanpercentile(flattened_vels[:,j],75,interpolation='midpoint')
-        iqr = Q3 - Q1
-        # extract only non-outliers into cleaned_vels
-        cleaned_vels[:,j,:]=np.where(np.abs(reciprocal_velocities[:,j,:]-median_vels[j])< threshold*iqr,reciprocal_velocities[:,j,:],np.nan)
+    if len(inferred_velocities.shape) == 3:
+        for j in range(flattened_vels.shape[1]):
+            # calculate inter-quartile range over i and time dimensions
+            Q1 = np.nanpercentile(flattened_vels[j,:],25,interpolation='midpoint')
+            Q3 = np.nanpercentile(flattened_vels[j,:],75,interpolation='midpoint')
+            iqr = Q3 - Q1
+            # extract only non-outliers into cleaned_vels
+            cleaned_vels[:,j,:]=np.where(np.abs(reciprocal_velocities[:,j,:]-median_vels[j])< threshold*iqr,reciprocal_velocities[:,j,:],np.nan)
+    elif len(inferred_velocities.shape) == 2:
+        for j in range(flattened_vels.shape[0]):
+            # calculate inter-quartile range over i and time dimensions
+            Q1 = np.nanpercentile(flattened_vels[j,:],25,interpolation='midpoint')
+            Q3 = np.nanpercentile(flattened_vels[j,:],75,interpolation='midpoint')
+            iqr = Q3 - Q1
+            # extract only non-outliers into cleaned_vels
+            cleaned_vels[j,:]=np.where(np.abs(reciprocal_velocities[j,:]-median_vels[j])< threshold*iqr,reciprocal_velocities[j,:],np.nan)
     return 1./cleaned_vels
 
 def remove_nonreciprocal_outliers(inferred_velocities,threshold):
     '''
-    Removes outliers in reciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
+    Removes outliers in nonreciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
     '''
-    # combine axes 0 and 2 (i and time) of inferred_velocities
-    flattened_vels = inferred_velocities.swapaxes(1,2).reshape(-1,inferred_velocities.shape[1]) # [i and time,j]
+    if len(inferred_velocities.shape) == 3:
+        # combine axes 0 and 2 (i and time) of inferred_velocities
+        flattened_vels = inferred_velocities.swapaxes(1,2).reshape(-1,inferred_velocities.shape[1]) # [i and time,j]
+        median_vels = np.nanmedian(inferred_velocities,axis=(0,2))
+    elif len(inferred_velocities.shape)==2:
+        #no flattening needed 
+        flattened_vels= inferred_velocities.copy()
+        median_vels = np.nanmedian(inferred_velocities,axis=(1))
+        pass
+    else:
+        print('Unusual velocity array shape. Please check code')
+        print('Shape is:',inferred_velocities.shape)
     # initialise loop over j
-    median_vels = np.nanmedian(inferred_velocities,axis=(0,2))
+
     cleaned_vels = np.full(inferred_velocities.shape,np.nan)
-    for j in range(flattened_vels.shape[1]):
-        # calculate inter-quartile range over i and time dimensions
-        Q1 = np.nanpercentile(flattened_vels[:,j],25,interpolation='midpoint')
-        Q3 = np.nanpercentile(flattened_vels[:,j],75,interpolation='midpoint')
-        iqr = Q3 - Q1
-        # extract only non-outliers into cleaned_vels
-        cleaned_vels[:,j,:]=np.where(np.abs(inferred_velocities[:,j,:]-median_vels[j])< threshold*iqr,inferred_velocities[:,j,:],np.nan)
+    if len(inferred_velocities.shape) == 3:
+        for j in range(flattened_vels.shape[1]):
+            # calculate inter-quartile range over i and time dimensions
+            Q1 = np.nanpercentile(flattened_vels[j,:],25,interpolation='midpoint')
+            Q3 = np.nanpercentile(flattened_vels[j,:],75,interpolation='midpoint')
+            iqr = Q3 - Q1
+            # extract only non-outliers into cleaned_vels
+            cleaned_vels[:,j,:]=np.where(np.abs(inferred_velocities[:,j,:]-median_vels[j])< threshold*iqr,inferred_velocities[:,j,:],np.nan)
+    elif len(inferred_velocities.shape) == 2:
+        for j in range(flattened_vels.shape[0]):
+            # calculate inter-quartile range over i and time dimensions
+            Q1 = np.nanpercentile(flattened_vels[j,:],25,interpolation='midpoint')
+            Q3 = np.nanpercentile(flattened_vels[j,:],75,interpolation='midpoint')
+            iqr = Q3 - Q1
+            # extract only non-outliers into cleaned_vels
+            cleaned_vels[j,:]=np.where(np.abs(inferred_velocities[j,:]-median_vels[j])< threshold*iqr,inferred_velocities[j,:],np.nan)
     return cleaned_vels
+
+
+# def remove_nonreciprocal_outliers(inferred_velocities,threshold):
+#     '''
+#     Removes outliers in reciprocal space. 'Outlier' defined as being more than IQR*threshold away from the median.
+#     '''
+#     # combine axes 0 and 2 (i and time) of inferred_velocities
+#     flattened_vels = inferred_velocities.swapaxes(1,2).reshape(-1,inferred_velocities.shape[1]) # [i and time,j]
+#     # initialise loop over j
+#     median_vels = np.nanmedian(inferred_velocities,axis=(0,2))
+#     cleaned_vels = np.full(inferred_velocities.shape,np.nan)
+#     for j in range(flattened_vels.shape[1]):
+#         # calculate inter-quartile range over i and time dimensions
+#         Q1 = np.nanpercentile(flattened_vels[:,j],25,interpolation='midpoint')
+#         Q3 = np.nanpercentile(flattened_vels[:,j],75,interpolation='midpoint')
+#         iqr = Q3 - Q1
+#         # extract only non-outliers into cleaned_vels
+#         cleaned_vels[:,j,:]=np.where(np.abs(inferred_velocities[:,j,:]-median_vels[j])< threshold*iqr,inferred_velocities[:,j,:],np.nan)
+#     return cleaned_vels
 
 
 
